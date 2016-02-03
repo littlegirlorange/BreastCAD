@@ -11,13 +11,29 @@ def enum(*sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
     return type('Enum', (), enums)
 
+
+motionCorrectionStepTag = "mc"
+breastSegmentationStepTag = "mask"
+registrationStepTag = "reg"
+annStepTag = "LesionProbMap"
+thresholdStepTag = "thresh"
+vesselRemovalStepTag = "vr"
+lesionMapTag = annStepTag + "_" + thresholdStepTag + "_" + vesselRemovalStepTag
+pastImageTag = registrationStepTag
+
+preContrastSeriesNameTag = "_Sag.VIBRANT.MPH"
+postContrastSeriesNameTag = "Sag.VIBRANT.MPH"
+breastSegmentationSeriesNameTag = "_?_Sag.VIBRANT.wo.FS"
+lesionMapSeriesNameTag = "_?_Sag.VIBRANT.wo.FS"
+
+
 currentImageFilenameParts = enum('PatientID',
                                  'DICOMNumber',
                                  'SeriesDate',
                                  'AccessionNumber',
                                  'SeriesNumber',
                                  'SeriesName',
-                                 'mc')
+                                 motionCorrectionStepTag)
 
 currentLesionMapFilenameParts = enum('PatientID',
                                      'DICOMNumber',
@@ -25,9 +41,9 @@ currentLesionMapFilenameParts = enum('PatientID',
                                      'AccessionNumber',
                                      'SeriesNumber',
                                      'SeriesName',
-                                     'LesionProbMap',
-                                     'thresh',
-                                     'vr')
+                                     annStepTag,
+                                     thresholdStepTag,
+                                     vesselRemovalStepTag)
 
 pastImageFilenameParts = enum('FixedPatientID',
                               'FixedDICOMNumber',
@@ -41,9 +57,8 @@ pastImageFilenameParts = enum('FixedPatientID',
                               'AccessionNumber',
                               'SeriesNumber',
                               'SeriesName',
-                              'mc',
-                              'warped',
-                              'elastix')
+                              motionCorrectionStepTag,
+                              registrationStepTag)
 
 pastLesionMapFilenameParts = enum('FixedPatientID',
                                   'FixedDICOMNumber',
@@ -57,14 +72,11 @@ pastLesionMapFilenameParts = enum('FixedPatientID',
                                   'AccessionNumber',
                                   'SeriesNumber',
                                   'SeriesName',
-                                  'LesionProbMap',
-                                  'warped',
-                                  'elastix',
-                                  'thresh',
-                                  'vr')
+                                  annStepTag,
+                                  registrationStepTag,
+                                  thresholdStepTag,
+                                  vesselRemovalStepTag)
 
-lesionMapTag = "vr"
-motionCorrectionTag = "mc"
-pastImageTag = "elastix"
+
 
 

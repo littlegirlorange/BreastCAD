@@ -4,27 +4,37 @@ import vtk, qt, ctk, slicer, numpy
 import vtkITK
 from fnmatch import fnmatch
 from slicer.ScriptedLoadableModule import *
+import EditorLib
+from EditorLib.EditUtil import EditUtil
 import logging
 import TrackLesionsParams as params
 import LabelStatsLogic
 
 
-customLayout = ("<layout type=\"horizontal\" split=\"true\" >"
+customLayout = (
+    "<layout type=\"horizontal\">"
     " <item>"
-    "  <view class=\"vtkMRMLSliceNode\" singletontag=\"Current\">"
+    "  <view class=\"vtkMRMLSliceNode\" singletontag=\"Current_Sub1\">"
     "   <property name=\"orientation\" action=\"default\">Sagittal</property>"
-    "   <property name=\"viewlabel\" action=\"default\">C</property>"
+    "   <property name=\"viewlabel\" action=\"default\">C_1</property>"
     "   <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
     "  </view>"
     " </item>"
     " <item>"
-    "  <view class=\"vtkMRMLSliceNode\" singletontag=\"Past\">"
+    "  <view class=\"vtkMRMLSliceNode\" singletontag=\"Past1_Sub1\">"
     "   <property name=\"orientation\" action=\"default\">Sagittal</property>"
-    "   <property name=\"viewlabel\" action=\"default\">P</property>"
+    "   <property name=\"viewlabel\" action=\"default\">P1_1</property>"
     "   <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
     "  </view>"
     " </item>"
-    " </layout>")
+    " <item>"
+    "  <view class=\"vtkMRMLSliceNode\" singletontag=\"Past2_Sub1\">"
+    "   <property name=\"orientation\" action=\"default\">Sagittal</property>"
+    "   <property name=\"viewlabel\" action=\"default\">P2_1</property>"
+    "   <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+    "  </view>"
+    " </item>"    
+    "</layout>")
   
 customLayoutId = 501
 
@@ -33,78 +43,127 @@ currentFourUpView = (
   " <item>"
   "  <layout type=\"horizontal\">"
   "   <item>"
-  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"CurrentRed\">"
-  "     <property name=\"orientation\" action=\"default\">Axial</property>"
-  "     <property name=\"viewlabel\" action=\"default\">CurR</property>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Current_Sub1\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">C_1</property>"
   "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
   "    </view>"
   "   </item>"
   "   <item>"
-  "    <view class=\"vtkMRMLViewNode\" singletontag=\"Current1\">"
-  "     <property name=\"viewlabel\" action=\"default\">Cur1</property>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Current_Sub2\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">C_2</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+  "    </view>"
+  "   </item>"
+    "   <item>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Current_Sub3\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">C_3</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+  "    </view>"
+  "   </item>"
+    "   <item>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Current_Sub4\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">C_4</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
   "    </view>"
   "   </item>"
   "  </layout>"
   " </item>"
   " <item>"
-  "  <layout type=\"horizontal\">"
-  "   <item>"
-  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"CurrentYellow\">"
-  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
-  "     <property name=\"viewlabel\" action=\"default\">CurY</property>"
-  "     <property name=\"viewcolor\" action=\"default\">#EDD54C</property>"
-  "    </view>"
-  "   </item>"
-  "   <item>"
-  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"CurrentGreen\">"
-  "     <property name=\"orientation\" action=\"default\">Coronal</property>"
-  "     <property name=\"viewlabel\" action=\"default\">CurG</property>"
-  "     <property name=\"viewcolor\" action=\"default\">#6EB04B</property>"
-  "    </view>"
-  "   </item>"
-  "  </layout>"
-  " </item>"
+  "  <view class=\"vtkMRMLViewNode\" singletontag=\"Current_VR\">"
+  "   <property name=\"viewlabel\" action=\"default\">C_VR</property>"
+  "  </view>"
+  " </item>"  
   "</layout>")
 currentFourUpViewId = 502
 
-pastFourUpView = (
+past1FourUpView = (
   "<layout type=\"vertical\">"
   " <item>"
   "  <layout type=\"horizontal\">"
   "   <item>"
-  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"PastRed\">"
-  "     <property name=\"orientation\" action=\"default\">Axial</property>"
-  "     <property name=\"viewlabel\" action=\"default\">PastR</property>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Past1_Sub1\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">P1_1</property>"
   "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
   "    </view>"
   "   </item>"
   "   <item>"
-  "    <view class=\"vtkMRMLViewNode\" singletontag=\"Past1\">"
-  "     <property name=\"viewlabel\" action=\"default\">Past1</property>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Past1_Sub2\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">P1_2</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+  "    </view>"
+  "   </item>"
+    "   <item>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Past1_Sub3\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">P1_3</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+  "    </view>"
+  "   </item>"
+    "   <item>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Past1_Sub4\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">P1_4</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
   "    </view>"
   "   </item>"
   "  </layout>"
   " </item>"
   " <item>"
+  "  <view class=\"vtkMRMLViewNode\" singletontag=\"Past1_VR\">"
+  "   <property name=\"viewlabel\" action=\"default\">P1_VR</property>"
+  "  </view>"
+  " </item>"  
+  "</layout>")
+past1FourUpViewId = 503
+
+past2FourUpView = (
+  "<layout type=\"vertical\">"
+  " <item>"
   "  <layout type=\"horizontal\">"
   "   <item>"
-  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"PastYellow\">"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Past2_Sub1\">"
   "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
-  "     <property name=\"viewlabel\" action=\"default\">PastY</property>"
-  "     <property name=\"viewcolor\" action=\"default\">#EDD54C</property>"
+  "     <property name=\"viewlabel\" action=\"default\">P2_1</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
   "    </view>"
   "   </item>"
   "   <item>"
-  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"PastGreen\">"
-  "     <property name=\"orientation\" action=\"default\">Coronal</property>"
-  "     <property name=\"viewlabel\" action=\"default\">PastG</property>"
-  "     <property name=\"viewcolor\" action=\"default\">#6EB04B</property>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Past2_Sub2\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">P2_2</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+  "    </view>"
+  "   </item>"
+    "   <item>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Past2_Sub3\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">P2_3</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+  "    </view>"
+  "   </item>"
+    "   <item>"
+  "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Past2_Sub4\">"
+  "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+  "     <property name=\"viewlabel\" action=\"default\">P2_4</property>"
+  "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
   "    </view>"
   "   </item>"
   "  </layout>"
   " </item>"
+  " <item>"
+  "  <view class=\"vtkMRMLViewNode\" singletontag=\"Past2_VR\">"
+  "   <property name=\"viewlabel\" action=\"default\">P2_VR</property>"
+  "  </view>"
+  " </item>"  
   "</layout>")
-pastFourUpViewId = 503
+past2FourUpViewId = 504
+
 
 #
 # TrackLesions
@@ -146,41 +205,41 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Instantiate and connect widgets ...
     # Set custom 2 sag view layout.
-    self.sliceLogicNames = ["Current", "Past"]
-    self.viewLogicNames = ["ViewCurrent1", "ViewPast1"]
+    
+    self.timePoints = ["Current", "Past1", "Past2"]
+    self.sliceWidgets = ["Sub1", "Sub2", "Sub3", "Sub4"]
+    self.viewLogicNames = ["ViewCurrent_VR", "ViewPast1_VR", "ViewPast2_VR"]
+    self.currentLabelNode = None
+    self.past1LabelNode = None
+    self.past2LabelNode = None
+    self.currentDiffNodes = None
+    self.past1DiffNodes = None
+    self.past2DiffNodes = None    
+
     layoutManager = slicer.app.layoutManager()
     layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
     layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(currentFourUpViewId, currentFourUpView)
-    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(pastFourUpViewId, pastFourUpView)
+    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(past1FourUpViewId, past1FourUpView)
+    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(past2FourUpViewId, past2FourUpView)    
     layoutManager.setLayout(currentFourUpViewId)
-    layoutManager.setLayout(pastFourUpViewId)
+    layoutManager.setLayout(past1FourUpViewId)
+    layoutManager.setLayout(past2FourUpViewId)
     layoutManager.setLayout(customLayoutId)
-    for iView in range(layoutManager.threeDViewCount):
-      threeDView = layoutManager.threeDWidget(iView).threeDView()
-      viewNode = threeDView.mrmlViewNode()
-      if viewNode.GetName() in self.viewLogicNames:
-        viewNode.SetBackgroundColor([0,0,0])
-        viewNode.SetBackgroundColor2([0,0,0])
-        viewNode.SetBoxVisible(0)
-        viewNode.SetAxisLabelsVisible(0)
     self.currentView = 'CompareView'
-    
-    sliceLogics = layoutManager.mrmlSliceLogics()
-    for i in xrange(sliceLogics.GetNumberOfItems()):
-      sliceLogic = sliceLogics.GetItemAsObject(i)
-      # if sliceLogic.GetName() in self.sliceLogicNames:
-      sliceNode = sliceLogic.GetSliceNode()
-      if sliceNode.GetLayoutGridRows() != 1 or sliceNode.GetLayoutGridColumns() != 1:
-        sliceNode.SetLayoutGrid(1,1)
-      sliceCompositeNode = sliceLogic.GetSliceCompositeNode()
-      sliceCompositeNode.SetLinkedControl(1)
-      
-    # Turn on navigation.
-    crosshairNode = slicer.util.getNode("vtkMRMLCrosshairNode*")
-    if crosshairNode:
-      crosshairNode.SetCrosshairMode(5)
-      crosshairNode.SetNavigation(1)
-          
+
+    #===========================================================================
+    # for iView in range(layoutManager.threeDViewCount):
+    #   threeDView = layoutManager.threeDWidget(iView).threeDView()
+    #   viewNode = threeDView.mrmlViewNode()
+    #   if viewNode.GetName() in self.viewLogicNames:
+    #     viewNode.SetBackgroundColor([0,0,0])
+    #     viewNode.SetBackgroundColor2([0,0,0])
+    #     viewNode.SetBoxVisible(0)
+    #     viewNode.SetAxisLabelsVisible(0)
+    #===========================================================================
+
+    self.resetUI()
+           
     #
     # Parameters Area
     #
@@ -190,85 +249,16 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Layout within the dummy collapsible button
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
-
-    #
-    # Current image selector
-    #
-    self.currentImgSelector = slicer.qMRMLNodeComboBox()
-    self.currentImgSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"] 
-    self.currentImgSelector.selectNodeUponCreation = True
-    self.currentImgSelector.addEnabled = False
-    self.currentImgSelector.removeEnabled = False
-    self.currentImgSelector.noneEnabled = False
-    self.currentImgSelector.showHidden = False
-    self.currentImgSelector.showChildNodeTypes = False
-    self.currentImgSelector.setMRMLScene( slicer.mrmlScene )
-    self.currentImgSelector.setToolTip( "Select the current first post-contrast image." )
-    parametersFormLayout.addRow("Current Ph1 image: ", self.currentImgSelector)
-
-    #
-    # Past image selector
-    #
-    self.pastImgSelector = slicer.qMRMLNodeComboBox()
-    self.pastImgSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.pastImgSelector.selectNodeUponCreation = True
-    self.pastImgSelector.addEnabled = False
-    self.pastImgSelector.removeEnabled = False
-    self.pastImgSelector.noneEnabled = False
-    self.pastImgSelector.showHidden = False
-    self.pastImgSelector.showChildNodeTypes = False
-    self.pastImgSelector.setMRMLScene( slicer.mrmlScene )
-    self.pastImgSelector.setToolTip( "Select the past first post-contrast image." )
-    parametersFormLayout.addRow("Past Ph1 image: ", self.pastImgSelector)
-
-    #
-    # Current lesion map selector
-    #
-    self.currentMapSelector = slicer.qMRMLNodeComboBox()
-    self.currentMapSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.currentMapSelector.selectNodeUponCreation = True
-    self.currentMapSelector.addEnabled = False
-    self.currentMapSelector.removeEnabled = False
-    self.currentMapSelector.noneEnabled = False
-    self.currentMapSelector.showHidden = False
-    self.currentMapSelector.showChildNodeTypes = False
-    self.currentMapSelector.setMRMLScene( slicer.mrmlScene )
-    self.currentMapSelector.setToolTip( "Select the current lesion map." )
-    parametersFormLayout.addRow("Current lesion map: ", self.currentMapSelector)
     
     #
-    # Past lesion map selector
+    # Patient selector
     #
-    self.pastMapSelector = slicer.qMRMLNodeComboBox()
-    self.pastMapSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.pastMapSelector.selectNodeUponCreation = True
-    self.pastMapSelector.addEnabled = False
-    self.pastMapSelector.removeEnabled = False
-    self.pastMapSelector.noneEnabled = False
-    self.pastMapSelector.showHidden = False
-    self.pastMapSelector.showChildNodeTypes = False
-    self.pastMapSelector.setMRMLScene( slicer.mrmlScene )
-    self.pastMapSelector.setToolTip( "Select the past lesion map." )
-    parametersFormLayout.addRow("Past lesion map: ", self.pastMapSelector)
-    
+    self.openPatientButton = qt.QPushButton("Select Folder")
+    parametersFormLayout.addRow("Open new CAD patient", self.openPatientButton)
+        
     #
     # View selector
     #
-    """
-    loader = qt.QUiLoader()
-    path = os.path.join(os.path.dirname(__file__), 'Resources', 'UI', 'viewRadioButtons.ui')
-    qfile = qt.QFile(path)
-    qfile.open(qt.QFile.ReadOnly)
-    self.window = loader.load(qfile)
-    window = self.window
-    find = slicer.util.findChildren
-    self.viewSelectorWidget = find(window, 'horizontalLayoutWidget')[0]
-    self.compareViewRadioButton = find(window, 'compareViewRadioButton')[0]
-    self.currentViewRadioButton = find(window, 'currentViewRadioButton')[0]
-    self.pastViewRadioButton = find(window, 'pastViewRadioButton')[0]
-    self.compareViewRadioButton.checked = True
-    parametersFormLayout.addRow("View: ", self.viewSelectorWidget)
-"""
     self.viewLayoutBox = qt.QGroupBox()
     self.viewLayoutBox.setLayout(qt.QFormLayout())
     self.compareViewRadioButton = qt.QRadioButton()
@@ -277,9 +267,12 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.currentViewRadioButton = qt.QRadioButton()
     self.viewLayoutBox.layout().addWidget(self.currentViewRadioButton)
     self.currentViewRadioButton.text = "Current only (4-up)"
-    self.pastViewRadioButton = qt.QRadioButton()
-    self.viewLayoutBox.layout().addWidget(self.pastViewRadioButton)
-    self.pastViewRadioButton.text = "Past only (4-up)"   
+    self.past1ViewRadioButton = qt.QRadioButton()
+    self.viewLayoutBox.layout().addWidget(self.past1ViewRadioButton)
+    self.past1ViewRadioButton.text = "Past1 only (4-up)"
+    self.past2ViewRadioButton = qt.QRadioButton()
+    self.viewLayoutBox.layout().addWidget(self.past2ViewRadioButton)
+    self.past2ViewRadioButton.text = "Past2 only (4-up)"     
     self.compareViewRadioButton.checked = True
     parametersFormLayout.addRow("View:", self.viewLayoutBox)
         
@@ -291,19 +284,40 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.inputSliceSelector = qt.QSpinBox()
     self.inputSliceSelector.singleStep = (1)
     self.inputSliceSelector.minimum = (1)
-    if self.currentImgSelector.currentNode():
-      dims = self.currentImgSelector.currentNode().GetImageData().GetDimensions()
-      maxSliceNo = dims[2]+1
-      value = round(maxSliceNo/2)
-    else:
-      maxSliceNo = 1
-      value = 1
-    self.inputSliceSelector.maximum = (maxSliceNo)
-    self.inputSliceSelector.value = (value)
+    self.inputSliceSelector.maximum = (1)
+    self.inputSliceSelector.value = (1)
     self.inputSliceSelector.setToolTip("Navigate sagittal views to the selected slice.")
     parametersFormLayout.addRow(self.inputSliceLabel, self.inputSliceSelector)
+     
+    #
+    # Contour Area
+    #
+    contourCollapsibleButton = ctk.ctkCollapsibleButton()
+    contourCollapsibleButton.text = "Contour lesion"
+    self.layout.addWidget(contourCollapsibleButton)
+
+    # Layout within the dummy collapsible button
+    contourFormLayout = qt.QFormLayout(contourCollapsibleButton)
     
-          
+    self.outputLabelSelector = slicer.qMRMLNodeComboBox()
+    self.outputLabelSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
+    self.outputLabelSelector.selectNodeUponCreation = True
+    self.outputLabelSelector.renameEnabled = True
+    self.outputLabelSelector.removeEnabled = True
+    self.outputLabelSelector.noneEnabled = False
+    self.outputLabelSelector.addEnabled = True
+    self.outputLabelSelector.setMRMLScene(slicer.mrmlScene)
+    self.outputLabelSelector.setToolTip('Create a new or select an existing lesion ROI.')
+    contourFormLayout.addRow("Output lesion ROI", self.outputLabelSelector)
+    
+    #
+    # Editor module button
+    #
+    self.editorButton = qt.QPushButton("Contour lesion")
+    self.editorButton.toolTip = "Contour lesion on current first subtraction image."
+    self.editorButton.enabled = True
+    contourFormLayout.addRow(self.editorButton)
+               
     #
     # Analysis Area
     #
@@ -366,16 +380,23 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.layout.addStretch(1)
     
     # connections
+    self.openPatientButton.connect("clicked()", self.onOpenPatientButton)
+    """
     self.currentImgSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onCurrentImgSelect)
-    self.pastImgSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onPastImgSelect)
+    self.past1ImgSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onPast1ImgSelect)
+    self.past2ImgSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onPast2ImgSelect)   
+    """ 
     self.inputSliceSelector.connect("valueChanged(int)", self.onInputSliceSelect)
     self.compareViewRadioButton.connect('clicked()', self.onViewSelected)
     self.currentViewRadioButton.connect('clicked()', self.onViewSelected)
-    self.pastViewRadioButton.connect('clicked()', self.onViewSelected)        
+    self.past1ViewRadioButton.connect('clicked()', self.onViewSelected)
+    self.past2ViewRadioButton.connect('clicked()', self.onViewSelected)  
+    self.editorButton.connect('clicked()', self.onEditorButton)         
     self.findIslandsButton.connect('clicked(bool)', self.onConvertMapToLabelButton)
     self.saveIslandsButton.connect('toggled(bool)', self.onSaveIslandsButtonToggled)
     self.queryIslandsButton.connect('toggled(bool)', self.onQueryIslandsButtonToggled)    
     self.subtractImagesButton.connect('clicked(bool)', self.onSubtractImagesButton)
+    
     
     self.styleObserverTags = []
     self.sliceWidgetsPerStyle = {}    
@@ -404,14 +425,34 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
   def cleanup(self):
     self.removeObservers()
+    
+  
+  def resetUI(self):
+    # Link views.
+    layoutManager = slicer.app.layoutManager()    
+    sliceLogics = layoutManager.mrmlSliceLogics()
+    for i in xrange(sliceLogics.GetNumberOfItems()):
+      sliceLogic = sliceLogics.GetItemAsObject(i)
+      sliceCompositeNode = sliceLogic.GetSliceCompositeNode()
+      sliceCompositeNode.SetLinkedControl(1)
+      sliceLogic.FitSliceToAll()
+
+    # Turn on navigation.
+    crosshairNode = slicer.util.getNode("vtkMRMLCrosshairNode*")
+    if crosshairNode:
+      crosshairNode.SetCrosshairMode(5)
+      crosshairNode.SetNavigation(1)
+       
 
   def onViewSelected(self):
     if self.compareViewRadioButton.checked:
       newView = 'CompareView'
     elif self.currentViewRadioButton.checked:
       newView = 'CurrentView'
+    elif self.past1ViewRadioButton.checked:
+      newView = 'Past1View'
     else:
-      newView = 'PastView'
+      newView = 'Past2View'
     if self.currentView != newView:
       self.setView(newView)
       
@@ -421,10 +462,14 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     if newView == 'CompareView':
       layoutManager.setLayout(customLayoutId)
     elif newView == 'CurrentView':
-      layoutManager.setLayout(currentFourUpViewId)     
+      layoutManager.setLayout(currentFourUpViewId)
+    elif newView == 'Past1View':
+      layoutManager.setLayout(past1FourUpViewId)
     else:
-      layoutManager.setLayout(pastFourUpViewId)
+      layoutManager.setLayout(past2FourUpViewId)
     self.currentView = newView
+    #self.setLayoutNodes()
+    
 
   def updateSliceWidget(self, widget, layer, nodeID, fitToBackground=False):
     sliceWidget = slicer.app.layoutManager().sliceWidget(widget)
@@ -438,8 +483,9 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     else:
       logging.debug("updateSliceWidget failed: invalid layer: " + layer)
     if fitToBackground:
-      sliceWidget.fitSliceToBackground()
+      #sliceWidget.fitSliceToBackground()
     print(("Updated widget: {0}, layer: {1}, nodeId: {2}").format(widget, layer, nodeID))
+    
     
   def getSliceWidgets(self, name="*", orientation="*"):
     if name != "*":
@@ -455,89 +501,229 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         sliceWidgets.append(sliceWidgetName)
     return sliceWidgets
 
-  def onCurrentImgSelect(self):
-    logic = TrackLesionsLogic()
-    lesionMapNode = logic.getLesionMap(self.currentImgSelector.currentNode())
-    self.currentMapSelector.setCurrentNode(lesionMapNode)
-    widgets = self.getSliceWidgets("Current")
-    for widget in widgets:
-      self.updateSliceWidget(widget, "Background", self.currentImgSelector.currentNode().GetID(), True)
-      if lesionMapNode:
-        self.updateSliceWidget(widget, "Foreground", lesionMapNode.GetID())
-    # Update slice selector widget according to current image dimensions.
-    dims = self.currentImgSelector.currentNode().GetImageData().GetDimensions()
+  
+  def getLinkedControl(self):
+    layoutManager = slicer.app.layoutManager()    
+    sliceLogics = layoutManager.mrmlSliceLogics()
+    for i in xrange(sliceLogics.GetNumberOfItems()):
+      sliceLogic = sliceLogics.GetItemAsObject(i)
+      sliceCompositeNode = sliceLogic.GetSliceCompositeNode()
+      isLinked = sliceCompositeNode.GetLinkedControl()
+      print sliceCompositeNode.GetID() + " is linked = " + str(isLinked) 
+
+  
+  def setLinkedControl(self):
+    layoutManager = slicer.app.layoutManager()    
+    sliceLogics = layoutManager.mrmlSliceLogics()
+    for i in xrange(sliceLogics.GetNumberOfItems()):
+      sliceLogic = sliceLogics.GetItemAsObject(i)
+      sliceCompositeNode = sliceLogic.GetSliceCompositeNode()
+      sliceCompositeNode.SetLinkedControl(1)
+      
+
+  def onOpenPatientButton(self):
+    # Prompt to close current scene if data is currently loaded.
+    if len(slicer.util.getNodes(pattern="*"+params.preContrastSeriesNameTag+"*")) > 0:
+      qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Close patient", 
+                                        "Close the current patient? \nUnsaved changes will be lost.", 
+                                        qt.QMessageBox.Ok, qt.QMessageBox.Cancel)
+      if qResult == qt.QMessageBox.Cancel:
+        return
+      else:
+        slicer.mrmlScene.Clear(0)
+        self.resetUI()
+        
+    # Pop up open data dialog.
+    slicer.util.openAddDataDialog()
+    self.logic = TrackLesionsLogic()
+    self.studies = self.logic.sortVolumeNodes()
+    if len(self.studies) == 0:
+      qt.QMessageBox.warning(slicer.util.mainWindow(), "Load patient",
+                             "Incomplete patient folder. \nUnable to process.")
+      # TODO: Disable processing buttons
+      return
+    
+    # Calculate subtraction images and display.
+    for iStudy, study in enumerate(self.studies):
+      self.logic.calculateSubtractionImages(study)
+      self.logic.maskFirstDiffNodeForVR(study)      
+      self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
+      self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
+    self.resetUI()
+      
+    # Set slice selector.
+    dims = self.studies[0].preContrastNode.GetImageData().GetDimensions()
     maxSliceNo = dims[2]+1
-    self.inputSliceSelector.maximum = (maxSliceNo)
-    if self.inputSliceSelector.value > maxSliceNo:
-      value = round(maxSliceNo/2)
+    curSliceNo = round(maxSliceNo/2)
+    self.setSliceSelector(minVal=1, maxVal=maxSliceNo, value=curSliceNo)
+    
+    # Update lesion label selector base name.
+    self.outputLabelSelector.baseName = self.studies[0].diffNodes[0].GetName()+"_lesion"
+
+
+  def setSliceSelector(self, minVal=None, maxVal=None, value=None):
+    # Update slice selector widget according to current image dimensions.
+    if maxVal:
+      self.inputSliceSelector.maximum = (maxVal)
+    if minVal:
+      self.inputSliceSelector.minimum = (minVal)
+    if value:
+      if value < self.inputSliceSelector.minimum:
+        value = self.inputSliceSelector.minimum
+      elif value > self.inputSliceSelector.maximum:
+        value = self.inputSliceSelector.maximum
       self.inputSliceSelector.value = (value)
 
-  def onPastImgSelect(self):
-    logic = TrackLesionsLogic()
-    lesionMapNode = logic.getLesionMap(self.pastImgSelector.currentNode())
-    self.pastMapSelector.setCurrentNode(lesionMapNode)
-    widgets = self.getSliceWidgets("Past")
-    for widget in widgets:
-      self.updateSliceWidget(widget, "Background", self.pastImgSelector.currentNode().GetID(), True)
-      if lesionMapNode:
-        self.updateSliceWidget(widget, "Foreground", lesionMapNode.GetID())    
 
   def onInputSliceSelect(self):
     slice = self.inputSliceSelector.value
     self.setSlice(slice)
     
+  #
+  # Contouring methods
+  #
+    
+  def onEditorButton(self):
+    if len(self.studies) != 0:
+      volumeNode = self.studies[0].diffNodes[0]
+#       volumeName = volumeNode.GetName()
+#       labelName = volumeName + "_lesion"
+#       labelNode = slicer.util.getNode(labelName)
+#       if not labelNode:
+#         volumesLogic = slicer.modules.volumes.logic()
+#         labelNode =  volumesLogic.CreateAndAddLabelVolume(slicer.mrmlScene, volumeNode, labelName )       
+      labelNode = self.outputLabelSelector.currentNode()
+      if labelNode:
+        self.editLabelNode(volumeNode, labelNode)
+      
+  
+  def editLabelNode(self, volumeNode, labelNode):
+    EditUtil.setActiveVolumes(volumeNode, labelNode)
+    EditUtil.setLabel(1)
+    EditUtil.setCurrentEffect("DrawEffect")    
+    moduleSelector = slicer.util.mainWindow().moduleSelector()
+    moduleSelector.selectModule('Editor')
+
+    #sliceWidget = slicer.app.layoutManager().sliceWidget('Current_Sub1')
+    #drawTool = EditorLib.DrawEffectTool(sliceWidget)      
+
+    
   def onSelect(self):
     pass
-    #self.applyButton.enabled = self.currentImgSelector.currentNode() and self.pastImgSelector.currentNode() and self.currentMapSelector.currentNode() and self.pastMapSelector.currentNode() and self.outputSelector.currentNode()
-    #self.subtractImagesButton.enabled = self.currentImgSelector.currentNode() and self.pastImgSelector.currentNode() and self.currentMapSelector.currentNode() and self.pastMapSelector.currentNode() and self.outputSelector.currentNode()
+
+    
+  def attachStudyToSliceWidgets(self, study, timePoint):
+    if timePoint in self.timePoints:
+      for iDiffNode in range(len(study.diffNodes)):
+        widget = timePoint + "_" + self.sliceWidgets[iDiffNode]
+        self.updateSliceWidget(widget, "Background", study.diffNodes[iDiffNode].GetID(), True)
+        self.updateSliceWidget(widget, "Foreground", None)
+        if study.labelNode:
+          self.updateSliceWidget(widget, "Label", study.labelNode.GetID())
+        
+
+  def attachStudyToVolumeWidget(self, study, timePoint):
+    if study.maskedDiffNode and timePoint in self.timePoints:
+      widget = "View" + timePoint + "_VR"
+      self.logic.renderVolume(study.maskedDiffNode, widget)
+
     
   def onSubtractImagesButton(self):
-    logic = TrackLesionsLogic()
-    currentNode = self.currentImgSelector.currentNode()
-    pastNode = self.pastImgSelector.currentNode()
-    if logic.isValidSubtractImageInput(currentNode) and logic.isValidSubtractImageInput(pastNode):
-      # Update slice nodes.
-      currentDiffNodes = logic.generateSubtractionImages(currentNode)
-      pastDiffNodes = logic.generateSubtractionImages(pastNode)
-      curWidgets = self.getSliceWidgets("Current")
-      for widget in curWidgets:
-        self.updateSliceWidget(widget, "Background", currentDiffNodes[0].GetID())
-        self.updateSliceWidget(widget, "Foreground", None)
-      pastWidgets = self.getSliceWidgets("Past")
-      for widget in pastWidgets:
-        self.updateSliceWidget(widget, "Background", pastDiffNodes[0].GetID())
-        self.updateSliceWidget(widget, "Foreground", None)
-        
-      # Update volume nodes.
-      curVolumeNode = currentDiffNodes[0]
-      pastVolumeNode = pastDiffNodes[0]
-      breastMaskNode = logic.getBreastMask(curVolumeNode)
-      if breastMaskNode:
-        curMaskedNode = logic.generateMaskedNode(curVolumeNode, breastMaskNode)
-        if curMaskedNode:
-          curVolumeNode = curMaskedNode
-        pastMaskedNode = logic.generateMaskedNode(pastVolumeNode, breastMaskNode)
-        if pastMaskedNode:
-          pastVolumeNode = pastMaskedNode
-      logic.renderVolume(curVolumeNode, "ViewCurrent1")
-      logic.renderVolume(pastVolumeNode, "ViewPast1")
+    for iStudy, study in enumerate(self.studies):
+      self.logic.calculateSubtractionImages(study)
+      self.logic.maskFirstDiffNodeForVR(study)
+      self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
+      self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
+          
+#===============================================================================
+#     # Calculate subtraction images for all series and update slice and
+#     # volume display widgets.
+#     currentNode = self.currentImgSelector.currentNode()
+#     if self.logic.isValidSubtractImageInput(currentNode):
+#       currentDiffNodes = self.logic.generateSubtractionImages(currentNode)
+#       self.currentDiffNodes = currentDiffNodes
+#       '''
+#       curWidgets = self.getSliceWidgets("Current")
+#       for widget in curWidgets:
+#         self.updateSliceWidget(widget, "Background", currentDiffNodes[0].GetID())
+#         self.updateSliceWidget(widget, "Foreground", None)
+#       '''
+#       self.updateCurrentWidgets()
+#       
+#       curVolumeNode = currentDiffNodes[0]
+#       breastMaskNode = self.logic.getBreastMask(curVolumeNode)
+#       if breastMaskNode:
+#         curMaskedNode = self.logic.generateMaskedNode(curVolumeNode, breastMaskNode)
+#         if curMaskedNode:
+#           curVolumeNode = curMaskedNode
+#       self.logic.renderVolume(curVolumeNode, "ViewCurrentVR")
+# 
+#     past1Node = self.past1ImgSelector.currentNode()
+#     if self.logic.isValidSubtractImageInput(past1Node):
+#       past1DiffNodes = self.logic.generateSubtractionImages(past1Node)
+#       self.past1DiffNodes = past1DiffNodes
+#       '''
+#       past1Widgets = self.getSliceWidgets("Past1")
+#       for widget in past1Widgets:
+#         self.updateSliceWidget(widget, "Background", past1DiffNodes[0].GetID())
+#         self.updateSliceWidget(widget, "Foreground", None)
+#       '''
+#       self.updatePast1Widgets()
+#       past1VolumeNode = past1DiffNodes[0]
+#       if breastMaskNode:
+#         past1MaskedNode = self.logic.generateMaskedNode(past1VolumeNode, breastMaskNode)
+#         if past1MaskedNode:
+#           past1VolumeNode = past1MaskedNode
+#       self.logic.renderVolume(past1VolumeNode, "ViewPast1VR")
+#         
+#     past2Node = self.past2ImgSelector.currentNode()
+#     if self.logic.isValidSubtractImageInput(past2Node):
+#       past2DiffNodes = self.logic.generateSubtractionImages(past2Node)
+#       self.past2DiffNodes = past2DiffNodes
+#       '''
+#       past2Widgets = self.getSliceWidgets("Past2")
+#       for widget in past2Widgets:
+#         self.updateSliceWidget(widget, "Background", past2DiffNodes[0].GetID())
+#         self.updateSliceWidget(widget, "Foreground", None)
+#       '''
+#       self.updatePast2Widgets()
+#       past2VolumeNode = past2DiffNodes[0]
+#       if breastMaskNode:
+#         past2MaskedNode = self.logic.generateMaskedNode(past2VolumeNode, breastMaskNode)
+#         if past2MaskedNode:
+#           past2VolumeNode = past2MaskedNode
+#       self.logic.renderVolume(past2VolumeNode, "ViewPast2VR")
+#===============================================================================
+      
       
   def onConvertMapToLabelButton(self):
-    logic = TrackLesionsLogic()
-    currentLabelNode = logic.convertMapToLabel(self.currentMapSelector.currentNode())
+    currentLabelNode = self.logic.convertMapToLabel(self.currentMapSelector.currentNode())
     if currentLabelNode:
-      currentIslandNode = logic.identifyIslands(currentLabelNode)
+      currentIslandNode = self.logic.identifyIslands(currentLabelNode)
     if currentIslandNode:
+      self.currentLabelNode = currentIslandNode
       widgets = self.getSliceWidgets("Current")
       for widget in widgets:
         self.updateSliceWidget(widget, "Label", currentIslandNode.GetID())
-    pastLabelNode = logic.convertMapToLabel(self.pastMapSelector.currentNode())
-    if pastLabelNode:
-      pastIslandNode = logic.identifyIslands(pastLabelNode)
-    if pastIslandNode:
-      widgets = self.getSliceWidgets("Past")
+        
+    past1LabelNode = self.logic.convertMapToLabel(self.past1MapSelector.currentNode())
+    if past1LabelNode:
+      past1IslandNode = self.logic.identifyIslands(past1LabelNode)
+    if past1IslandNode:
+      self.past1LabelNode = past1IslandNode
+      widgets = self.getSliceWidgets("Past1")
       for widget in widgets:
-        self.updateSliceWidget(widget, "Label", pastIslandNode.GetID())
+        self.updateSliceWidget(widget, "Label", past1IslandNode.GetID())
+        
+    past2LabelNode = self.logic.convertMapToLabel(self.past2MapSelector.currentNode())
+    if past2LabelNode:
+      past2IslandNode = self.logic.identifyIslands(past2LabelNode)
+    if past2IslandNode:
+      self.past2LabelNode = past2IslandNode
+      widgets = self.getSliceWidgets("Past2")
+      for widget in widgets:
+        self.updateSliceWidget(widget, "Label", past2IslandNode.GetID())
+        
         
   def onSaveIslandsButtonToggled(self, checked):
     if checked:
@@ -735,6 +921,88 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     return True
 
 
+  def sortVolumeNodes(self):
+    """Sorts the volume nodes in the scene into study objects.
+    Each study contains multiple series.
+    """
+    
+    studies = []
+    
+    # Get all pre-contrast nodes (should be one per study).
+    preContrastNodeDict = slicer.util.getNodes(pattern="*"+params.preContrastSeriesNameTag+"*")
+    nSeries = len(preContrastNodeDict)
+    if nSeries == 0:
+      return studies
+    preContrastNodeNames = sorted(preContrastNodeDict.keys(), reverse=True)
+    
+    # Get all volume nodes associated with this pre-contrast volume. 
+    for name in preContrastNodeNames:
+      preContrastNode = preContrastNodeDict[name]
+      study = self.getStudyVolumeNodes(preContrastNode)
+      if study:
+        studies.append(study)
+        
+    # Some previous studies don't have registered breast masks.  Use the
+    # current study's breast mask if missing.
+    for iStudy in range(1, len(studies)):
+      if not studies[iStudy].maskNode:
+        studies[iStudy].maskNode = studies[0].maskNode
+    
+    return studies
+  
+    
+  def getStudyVolumeNodes(self, preContrastNode):
+    """Extracts names of all required volume nodes for each study:
+      pre-contrast
+      post-contrast (4 nodes)
+      lesion map (optional)
+      breast mask (optional)
+      Returns True if one or more studies are found consisting of 1 pre-contrast image and 4 post-contrast images
+    """
+    # Get all corresponding post-contrast, lesion map and mask nodes.
+    nodeName = preContrastNode.GetName()
+    parts = nodeName.split("_")
+    if params.pastImageTag in parts:
+      # Past series.
+      seriesIndex = params.pastImageFilenameParts.SeriesNumber
+      patientId = parts[params.pastImageFilenameParts.PatientID]
+      accessionNo = parts[params.pastImageFilenameParts.AccessionNumber]
+    else:
+      # Current series.
+      seriesIndex = params.currentImageFilenameParts.SeriesNumber
+      patientId = parts[params.currentImageFilenameParts.PatientID]
+      accessionNo = parts[params.currentImageFilenameParts.AccessionNumber]
+    prefix = ('_').join(parts[0:seriesIndex])
+      
+    study = CADStudy(patientId, accessionNo)
+    study.preContrastNode = preContrastNode
+      
+    # Find post-contrast nodes.
+    pattern = prefix+"_???_Ph?"+params.postContrastSeriesNameTag+"*"
+    postNodeDict = slicer.util.getNodes(pattern=pattern)
+    nPostNodes = len(postNodeDict)
+    if nPostNodes != 4:
+      logging.info(("{0}: {1} post contrast nodes found").format(nodeName, str(nPostNodes)))
+    nodeNames = sorted(postNodeDict.keys())
+    study.postContrastNodes = []
+    for name in nodeNames:
+      study.postContrastNodes.append(postNodeDict[name])
+      
+    # Find lesion map.
+    lesionMapNode = self.getLesionMap(preContrastNode)
+    lesionMapNodeName = ""
+    if lesionMapNode:
+      study.lesionMapNode = lesionMapNode
+      
+    # Find breast mask.
+    maskNode = self.getBreastMask(preContrastNode)
+    maskNodeName = ""
+    if maskNode:
+      study.maskNode = maskNode
+
+    return study
+
+
   def createNumpyArray (self, node):
     # Generate Numpy Array from vtkMRMLScalarVolumeNode
     imageData = vtk.vtkImageData()
@@ -742,10 +1010,9 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     shapeData = list(imageData.GetDimensions())
     return (vtk.util.numpy_support.vtk_to_numpy(imageData.GetPointData().GetScalars()).reshape(shapeData))
 
-  def getSeriesIndex(self, volumeNode):
+  def getSeriesIndex(self, volumeNodeName):
     # Returns the index of the volume series number in the volume node name
-    volumeName = volumeNode.GetName()
-    parts = volumeName.split("_")
+    parts = volumeNodeName.split("_")
     if params.pastImageTag in parts:
       # Past series.
       seriesIndex = params.pastImageFilenameParts.SeriesNumber
@@ -816,76 +1083,39 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     
     return outputNode 
     
+  def calculateSubtractionImages(self, study):
 
-  def generateSubtractionImages(self, inputNode):
-    nodeName = inputNode.GetName()
-    parts = nodeName.split("_")
-    if params.pastImageTag in parts:
-      # Past series.
-      seriesIndex = params.pastImageFilenameParts.SeriesNumber
-      prePostfix = params.preContrastSeriesNameTag + "_" + params.registrationStepTag
-      # prePostfix = "_Sag.VIBRANT.MPH_reg"      
-      if params.motionCorrectionStepTag in parts:
-        # Motion corrected.
-        postPostfix = params.postContrastSeriesNameTag + "_" + params.motionCorrectionStepTag + "_" + params.registrationStepTag
-        # postPostfix = "Sag.VIBRANT.MPH_mc_reg"
-      else:
-        postPostfix = params.postContrastSeriesNameTag + "_" + params.registrationStepTag
-        # postPostfix = "Sag.VIBRANT.MPH_reg"
-    else:
-      # Current series.
-      seriesIndex = params.currentImageFilenameParts.SeriesNumber
-      prePostfix = params.preContrastSeriesNameTag
-      # prePostfix = "_Sag.VIBRANT.MPH"
-      if params.motionCorrectionStepTag in parts:
-        postPostfix = params.postContrastSeriesNameTag + "_" + params.motionCorrectionStepTag
-        # postPostfix = "Sag.VIBRANT.MPH_mc"
-      else:
-        postPostfix = postContrastSeriesNameTag
-        # postPostfix = "Sag.VIBRANT.MPH"    
-    
-    print len(parts[seriesIndex])
-    if len(parts[seriesIndex]) != 3:
-      # Series number is < 3 characters long -> not a pre- or post-contrast image series.
-      logging.info("Error in generateSubtractionImages: series number is not 3 digits long")
-      return
-  
-    # Get pre-contrast image by series number. 
-    # Expecting 3 digits ending with 0 (e.g., 600).
-    # Also expecting node name to end in "_Sag.VIBRANT.MPH"
-    parts[seriesIndex] = parts[seriesIndex][0:2]+'0'
-    series0 = parts[seriesIndex]
-    img0Name = ('_').join(parts[0:seriesIndex+1]) + prePostfix
-    print img0Name
-    img0Data = slicer.util.getNode(img0Name).GetImageData()
-   
     diffNodes = []
-    for i in range(4):  # Assume 4 post-contrast images.
-      # Get series number. Expecting 3 digits (e.g., 601).
-      # Also expecting node name to end in "_Ph[N]Sag.VIBRANT.MPH"
-      # where [N] is between 1-4.
-      parts[seriesIndex] = parts[seriesIndex][0:2]+str(i+1)
-      seriesN = parts[seriesIndex]
-      imgName = ('_').join(parts[0:seriesIndex+1]) + "_Ph" + str(i+1) + postPostfix
-      print imgName
-      
-      # Subtract the pre-contrast image from this image.
-      imgData = slicer.util.getNode(imgName).GetImageData()
-      
+    
+    # Get pre-contrast series.
+    series0Name = study.preContrastNode.GetName()
+    series0Parts = series0Name.split("_")
+    series0SeriesIndex = self.getSeriesIndex(series0Name)
+    series0SeriesNumber = series0Parts[series0SeriesIndex]
+    series0Data = study.preContrastNode.GetImageData()
+
+    # Subtract each post-contrast series from the pre-contrast series.
+    for iSeries in range(len(study.postContrastNodes)):
       # Set up VTK subtraction filter.
-      img0Cast = vtk.vtkImageCast()
-      img0Cast.SetInputData(img0Data)
-      img0Cast.SetOutputScalarType(imgData.GetScalarType())
-      img0Cast.ClampOverflowOn()        
+      # Need to cast pre-contrast image because post-contrast images
+      # are converted to doubles during motion correction.
+      seriesName = study.postContrastNodes[iSeries].GetName()
+      seriesParts = seriesName.split("_")
+      seriesSeriesNumber = seriesParts[self.getSeriesIndex(seriesName)]
+      seriesData = study.postContrastNodes[iSeries].GetImageData()
+      series0Cast = vtk.vtkImageCast()
+      series0Cast.SetInputData(series0Data)
+      series0Cast.SetOutputScalarType(seriesData.GetScalarType())
+      series0Cast.ClampOverflowOn()
       diffFilter = vtk.vtkImageMathematics()
       diffFilter.SetOperationToSubtract()
-      diffFilter.SetInputConnection(1, img0Cast.GetOutputPort())  
-      #diffFilter.SetInputData(1, img0Data)
-      diffFilter.SetInputData(0, imgData)
+      diffFilter.SetInputConnection(1, series0Cast.GetOutputPort())  
+      diffFilter.SetInputData(0, seriesData)
       diffFilter.Update()
       
       # Check to see if there's already an output node.
-      newName = ('_').join(parts[0:seriesIndex])+"_"+seriesN+"-"+series0
+      newName = ("_").join(series0Parts[0:series0SeriesIndex])+"_"+seriesSeriesNumber+"-"+series0SeriesNumber
+      inputNode = study.preContrastNode
       outputNode = slicer.util.getNode(newName)
       if not outputNode:
         outputNode = self.createOutputVolumeNode(newName, 'Grey')
@@ -897,10 +1127,104 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
       displayNode.SetAutoWindowLevel(0)
       displayNode.SetThreshold(0, scalarRange[1])
       displayNode.SetWindowLevelMinMax(0, scalarRange[1])
-      
+          
       diffNodes.append(outputNode)
-      
-    return diffNodes   
+        
+    study.diffNodes = diffNodes
+    
+    
+  def maskFirstDiffNodeForVR(self, study):
+    if study.maskNode and study.diffNodes[0]:
+      study.maskedDiffNode = self.generateMaskedNode(study.diffNodes[0], study.maskNode)
+         
+
+  #=============================================================================
+  # def generateSubtractionImages(self, inputNode):
+  #   nodeName = inputNode.GetName()
+  #   parts = nodeName.split("_")
+  #   if params.pastImageTag in parts:
+  #     # Past series.
+  #     seriesIndex = params.pastImageFilenameParts.SeriesNumber
+  #     prePostfix = params.preContrastSeriesNameTag + "_" + params.registrationStepTag
+  #     # prePostfix = "_Sag.VIBRANT.MPH_reg"      
+  #     if params.motionCorrectionStepTag in parts:
+  #       # Motion corrected.
+  #       postPostfix = params.postContrastSeriesNameTag + "_" + params.motionCorrectionStepTag + "_" + params.registrationStepTag
+  #       # postPostfix = "Sag.VIBRANT.MPH_mc_reg"
+  #     else:
+  #       postPostfix = params.postContrastSeriesNameTag + "_" + params.registrationStepTag
+  #       # postPostfix = "Sag.VIBRANT.MPH_reg"
+  #   else:
+  #     # Current series.
+  #     seriesIndex = params.currentImageFilenameParts.SeriesNumber
+  #     prePostfix = params.preContrastSeriesNameTag
+  #     # prePostfix = "_Sag.VIBRANT.MPH"
+  #     if params.motionCorrectionStepTag in parts:
+  #       postPostfix = params.postContrastSeriesNameTag + "_" + params.motionCorrectionStepTag
+  #       # postPostfix = "Sag.VIBRANT.MPH_mc"
+  #     else:
+  #       postPostfix = postContrastSeriesNameTag
+  #       # postPostfix = "Sag.VIBRANT.MPH"    
+  #   
+  #   print len(parts[seriesIndex])
+  #   if len(parts[seriesIndex]) != 3:
+  #     # Series number is < 3 characters long -> not a pre- or post-contrast image series.
+  #     logging.info("Error in generateSubtractionImages: series number is not 3 digits long")
+  #     return
+  # 
+  #   # Get pre-contrast image by series number. 
+  #   # Expecting 3 digits ending with 0 (e.g., 600).
+  #   # Also expecting node name to end in "_Sag.VIBRANT.MPH"
+  #   parts[seriesIndex] = parts[seriesIndex][0:2]+'0'
+  #   series0 = parts[seriesIndex]
+  #   img0Name = ('_').join(parts[0:seriesIndex+1]) + prePostfix
+  #   print img0Name
+  #   img0Data = slicer.util.getNode(img0Name).GetImageData()
+  #  
+  #   diffNodes = []
+  #   for i in range(4):  # Assume 4 post-contrast images.
+  #     # Get series number. Expecting 3 digits (e.g., 601).
+  #     # Also expecting node name to end in "_Ph[N]Sag.VIBRANT.MPH"
+  #     # where [N] is between 1-4.
+  #     parts[seriesIndex] = parts[seriesIndex][0:2]+str(i+1)
+  #     seriesN = parts[seriesIndex]
+  #     imgName = ('_').join(parts[0:seriesIndex+1]) + "_Ph" + str(i+1) + postPostfix
+  #     print imgName
+  #     
+  #     # Subtract the pre-contrast image from this image.
+  #     imgData = slicer.util.getNode(imgName).GetImageData()
+  #     
+  #     # Set up VTK subtraction filter.
+  #     img0Cast = vtk.vtkImageCast()
+  #     img0Cast.SetInputData(img0Data)
+  #     img0Cast.SetOutputScalarType(imgData.GetScalarType())
+  #     img0Cast.ClampOverflowOn()        
+  #     diffFilter = vtk.vtkImageMathematics()
+  #     diffFilter.SetOperationToSubtract()
+  #     diffFilter.SetInputConnection(1, img0Cast.GetOutputPort())  
+  #     #diffFilter.SetInputData(1, img0Data)
+  #     diffFilter.SetInputData(0, imgData)
+  #     diffFilter.Update()
+  #     
+  #     # Check to see if there's already an output node.
+  #     newName = ('_').join(parts[0:seriesIndex])+"_"+seriesN+"-"+series0
+  #     outputNode = slicer.util.getNode(newName)
+  #     if not outputNode:
+  #       outputNode = self.createOutputVolumeNode(newName, 'Grey')
+  #     self.connectImageDataToOutputNode(inputNode, outputNode, diffFilter.GetOutput())
+  #     
+  #     # Change display properties (don't show negative values).
+  #     scalarRange = diffFilter.GetOutput().GetScalarRange()
+  #     displayNode = outputNode.GetDisplayNode()
+  #     displayNode.SetAutoWindowLevel(0)
+  #     displayNode.SetThreshold(0, scalarRange[1])
+  #     displayNode.SetWindowLevelMinMax(0, scalarRange[1])
+  #     
+  #     diffNodes.append(outputNode)
+  #     
+  #   return diffNodes
+  # 
+  #=============================================================================
 
   def convertMapToLabel(self, lesionMapNode):
       
@@ -919,7 +1243,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     # Check to see if there's already an output node.
     lesionMapName = lesionMapNode.GetName()
     parts = lesionMapName.split("_")
-    seriesIndex = self.getSeriesIndex(lesionMapNode)
+    seriesIndex = self.getSeriesIndex(lesionMapName)
     newName = ('_').join(parts[0:seriesIndex])+"_label"
     outputNode = slicer.util.getNode(newName)
     if not outputNode:
@@ -1134,6 +1458,11 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     volumeNode.AddAndObserveDisplayNodeID(volumeRenderingDisplay.GetID())
     
     viewNode = slicer.util.getNode(widget)
+    viewNode.SetBackgroundColor([0,0,0])
+    viewNode.SetBackgroundColor2([0,0,0])
+    viewNode.SetBoxVisible(0)
+    viewNode.SetAxisLabelsVisible(0)
+        
     viewNodeId = viewNode.GetID()
     cameraNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLCameraNode')
     for iCamera in range(slicer.mrmlScene.GetNumberOfNodesByClass('vtkMRMLCameraNode')):
@@ -1142,7 +1471,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
       if activeTag == viewNodeId:
         print(("rendering 3d view Widget: {0}, ViewNodeId: {1}, CameraNodeActiveTag: {2}").format(widget, viewNodeId, cameraNode.GetActiveTag))
         camera = cameraNode.GetCamera()
-        camera.SetPosition(0, 600, 0)
+        camera.SetPosition(-600, 0, 0)
         camera.SetViewUp(0, 0, 1)
 
 
@@ -1293,4 +1622,17 @@ class LabelStatsLogic:
         self.labelStats[i,"StdDev"] = "{0:.1f}".format(stat1.GetStandardDeviation()[0])
         self.labelStats[i,"LabelNode"] = labelName
         self.labelStats[i,"ImageNode"] = grayscaleNode.GetName()
+        
+class CADStudy:
+  def __init__(self, patId, accessionNo):
+    self.patId = patId
+    self.accessionNo = accessionNo
+    self.preContrastNode = None
+    self.postContrastNodes = None
+    self.lesionMapNode = None
+    self.maskNode = None
+    self.diffNodes = None
+    self.labelNode = None
+    self.maskedDiffNode = None
+      
 

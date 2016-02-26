@@ -4,9 +4,9 @@ import vtk, qt, ctk, slicer, numpy
 import vtkITK
 from fnmatch import fnmatch
 from slicer.ScriptedLoadableModule import *
-import EditorLib
-from EditorLib.EditUtil import EditUtil
 import logging
+import MyEditor
+from MyEditorLib.EditUtil import EditUtil
 import TrackLesionsParams as params
 import LabelStatsLogic
 
@@ -227,17 +227,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     layoutManager.setLayout(customLayoutId)
     self.currentView = 'CompareView'
 
-    #===========================================================================
-    # for iView in range(layoutManager.threeDViewCount):
-    #   threeDView = layoutManager.threeDWidget(iView).threeDView()
-    #   viewNode = threeDView.mrmlViewNode()
-    #   if viewNode.GetName() in self.viewLogicNames:
-    #     viewNode.SetBackgroundColor([0,0,0])
-    #     viewNode.SetBackgroundColor2([0,0,0])
-    #     viewNode.SetBoxVisible(0)
-    #     viewNode.SetAxisLabelsVisible(0)
-    #===========================================================================
-
     self.resetUI()
            
     #
@@ -254,7 +243,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     # Patient selector
     #
     self.openPatientButton = qt.QPushButton("Select Folder")
-    parametersFormLayout.addRow("Open new CAD patient", self.openPatientButton)
+    parametersFormLayout.addRow("CAD patient:", self.openPatientButton)
         
     #
     # View selector
@@ -279,7 +268,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     #
     # Slice selector
     #
-    self.inputSliceLabel = qt.QLabel("Show sagittal slice:")
+    self.inputSliceLabel = qt.QLabel("Jump to slice:")
     self.inputSliceLabel.setToolTip("Navigate sagittal views to the selected slice.")
     self.inputSliceSelector = qt.QSpinBox()
     self.inputSliceSelector.singleStep = (1)
@@ -293,36 +282,25 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     # Contour Area
     #
     contourCollapsibleButton = ctk.ctkCollapsibleButton()
-    contourCollapsibleButton.text = "Contour lesion"
+    contourCollapsibleButton.text = "Contour lesions"
     self.layout.addWidget(contourCollapsibleButton)
 
     # Layout within the dummy collapsible button
     contourFormLayout = qt.QFormLayout(contourCollapsibleButton)
     
-    self.outputLabelSelector = slicer.qMRMLNodeComboBox()
-    self.outputLabelSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
-    self.outputLabelSelector.selectNodeUponCreation = True
-    self.outputLabelSelector.renameEnabled = True
-    self.outputLabelSelector.removeEnabled = True
-    self.outputLabelSelector.noneEnabled = False
-    self.outputLabelSelector.addEnabled = True
-    self.outputLabelSelector.setMRMLScene(slicer.mrmlScene)
-    self.outputLabelSelector.setToolTip('Create a new or select an existing lesion ROI.')
-    contourFormLayout.addRow("Output lesion ROI", self.outputLabelSelector)
-    
-    #
-    # Editor module button
-    #
-    self.editorButton = qt.QPushButton("Contour lesion")
-    self.editorButton.toolTip = "Contour lesion on current first subtraction image."
-    self.editorButton.enabled = True
-    contourFormLayout.addRow(self.editorButton)
+    self.editBoxFrame = qt.QFrame()
+    self.editBoxFrame.objectName = 'EditBoxFrame'
+    self.editBoxFrame.setLayout(qt.QVBoxLayout())
+    contourFormLayout.addRow(self.editBoxFrame)
+    self.editor = MyEditor.EditorWidget(self.editBoxFrame, False)
+   
                
     #
     # Analysis Area
     #
     analysisCollapsibleButton = ctk.ctkCollapsibleButton()
     analysisCollapsibleButton.text = "Analysis"
+    analysisCollapsibleButton.collapsed = True
     self.layout.addWidget(analysisCollapsibleButton)
 
     # Layout within the dummy collapsible button
@@ -366,7 +344,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.labelstatisticsCollapsibleButton = ctk.ctkCollapsibleButton()
     self.labelstatisticsCollapsibleButton.text = "Lesion Label Statistics"
     analysisFormLayout.addWidget(self.labelstatisticsCollapsibleButton)
-    self.labelstatisticsCollapsibleButton.collapsed = False
+    self.labelstatisticsCollapsibleButton.collapsed = True
     # Layout within the collapsible button
     self.labelstatisticsLayout = qt.QFormLayout(self.labelstatisticsCollapsibleButton)
     # Table View to display Label statistics
@@ -381,23 +359,16 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     
     # connections
     self.openPatientButton.connect("clicked()", self.onOpenPatientButton)
-    """
-    self.currentImgSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onCurrentImgSelect)
-    self.past1ImgSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onPast1ImgSelect)
-    self.past2ImgSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onPast2ImgSelect)   
-    """ 
     self.inputSliceSelector.connect("valueChanged(int)", self.onInputSliceSelect)
     self.compareViewRadioButton.connect('clicked()', self.onViewSelected)
     self.currentViewRadioButton.connect('clicked()', self.onViewSelected)
     self.past1ViewRadioButton.connect('clicked()', self.onViewSelected)
-    self.past2ViewRadioButton.connect('clicked()', self.onViewSelected)  
-    self.editorButton.connect('clicked()', self.onEditorButton)         
+    self.past2ViewRadioButton.connect('clicked()', self.onViewSelected)         
     self.findIslandsButton.connect('clicked(bool)', self.onConvertMapToLabelButton)
     self.saveIslandsButton.connect('toggled(bool)', self.onSaveIslandsButtonToggled)
     self.queryIslandsButton.connect('toggled(bool)', self.onQueryIslandsButtonToggled)    
     self.subtractImagesButton.connect('clicked(bool)', self.onSubtractImagesButton)
-    
-    
+      
     self.styleObserverTags = []
     self.sliceWidgetsPerStyle = {}    
 
@@ -483,7 +454,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     else:
       logging.debug("updateSliceWidget failed: invalid layer: " + layer)
     if fitToBackground:
-      #sliceWidget.fitSliceToBackground()
+      sliceWidget.fitSliceToBackground()
     print(("Updated widget: {0}, layer: {1}, nodeId: {2}").format(widget, layer, nodeID))
     
     
@@ -535,6 +506,8 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         
     # Pop up open data dialog.
     slicer.util.openAddDataDialog()
+    
+    # Sort input data into separate studies.
     self.logic = TrackLesionsLogic()
     self.studies = self.logic.sortVolumeNodes()
     if len(self.studies) == 0:
@@ -543,12 +516,23 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       # TODO: Disable processing buttons
       return
     
-    # Calculate subtraction images and display.
     for iStudy, study in enumerate(self.studies):
+      # Calculate subtraction images.
       self.logic.calculateSubtractionImages(study)
-      self.logic.maskFirstDiffNodeForVR(study)      
+      
+      # Set up label nodes for lesion contouring.
+      volumeNode = study.diffNodes[0]
+      labelNodeName = volumeNode.GetName() + "_label"
+      labelNode = slicer.modules.volumes.logic().CreateAndAddLabelVolume(slicer.mrmlScene, volumeNode, labelNodeName)
+      colorNode = slicer.util.getNode('GenericColors')
+      labelNode.GetDisplayNode().SetAndObserveColorNodeID(colorNode.GetID())
+      study.labelNode = labelNode
+      
+      # Attach to slice and volume displays.
       self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
+      self.logic.maskFirstDiffNodeForVR(study)
       self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
+    
     self.resetUI()
       
     # Set slice selector.
@@ -557,8 +541,11 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     curSliceNo = round(maxSliceNo/2)
     self.setSliceSelector(minVal=1, maxVal=maxSliceNo, value=curSliceNo)
     
-    # Update lesion label selector base name.
-    self.outputLabelSelector.baseName = self.studies[0].diffNodes[0].GetName()+"_lesion"
+    # Enable lesion contouring.
+    EditUtil.setActiveVolumes(self.studies[0].diffNodes[0], self.studies[0].labelNode)
+    EditUtil.setLabel(1)
+    self.editor.setMergeNode(self.studies[0].labelNode)
+
 
 
   def setSliceSelector(self, minVal=None, maxVal=None, value=None):
@@ -582,31 +569,10 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   #
   # Contouring methods
   #
-    
-  def onEditorButton(self):
-    if len(self.studies) != 0:
-      volumeNode = self.studies[0].diffNodes[0]
-#       volumeName = volumeNode.GetName()
-#       labelName = volumeName + "_lesion"
-#       labelNode = slicer.util.getNode(labelName)
-#       if not labelNode:
-#         volumesLogic = slicer.modules.volumes.logic()
-#         labelNode =  volumesLogic.CreateAndAddLabelVolume(slicer.mrmlScene, volumeNode, labelName )       
-      labelNode = self.outputLabelSelector.currentNode()
-      if labelNode:
-        self.editLabelNode(volumeNode, labelNode)
-      
-  
-  def editLabelNode(self, volumeNode, labelNode):
+  def editLabelNode(self, labelNode, volumeNode):
     EditUtil.setActiveVolumes(volumeNode, labelNode)
     EditUtil.setLabel(1)
     EditUtil.setCurrentEffect("DrawEffect")    
-    moduleSelector = slicer.util.mainWindow().moduleSelector()
-    moduleSelector.selectModule('Editor')
-
-    #sliceWidget = slicer.app.layoutManager().sliceWidget('Current_Sub1')
-    #drawTool = EditorLib.DrawEffectTool(sliceWidget)      
-
     
   def onSelect(self):
     pass
@@ -635,66 +601,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
       self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
           
-#===============================================================================
-#     # Calculate subtraction images for all series and update slice and
-#     # volume display widgets.
-#     currentNode = self.currentImgSelector.currentNode()
-#     if self.logic.isValidSubtractImageInput(currentNode):
-#       currentDiffNodes = self.logic.generateSubtractionImages(currentNode)
-#       self.currentDiffNodes = currentDiffNodes
-#       '''
-#       curWidgets = self.getSliceWidgets("Current")
-#       for widget in curWidgets:
-#         self.updateSliceWidget(widget, "Background", currentDiffNodes[0].GetID())
-#         self.updateSliceWidget(widget, "Foreground", None)
-#       '''
-#       self.updateCurrentWidgets()
-#       
-#       curVolumeNode = currentDiffNodes[0]
-#       breastMaskNode = self.logic.getBreastMask(curVolumeNode)
-#       if breastMaskNode:
-#         curMaskedNode = self.logic.generateMaskedNode(curVolumeNode, breastMaskNode)
-#         if curMaskedNode:
-#           curVolumeNode = curMaskedNode
-#       self.logic.renderVolume(curVolumeNode, "ViewCurrentVR")
-# 
-#     past1Node = self.past1ImgSelector.currentNode()
-#     if self.logic.isValidSubtractImageInput(past1Node):
-#       past1DiffNodes = self.logic.generateSubtractionImages(past1Node)
-#       self.past1DiffNodes = past1DiffNodes
-#       '''
-#       past1Widgets = self.getSliceWidgets("Past1")
-#       for widget in past1Widgets:
-#         self.updateSliceWidget(widget, "Background", past1DiffNodes[0].GetID())
-#         self.updateSliceWidget(widget, "Foreground", None)
-#       '''
-#       self.updatePast1Widgets()
-#       past1VolumeNode = past1DiffNodes[0]
-#       if breastMaskNode:
-#         past1MaskedNode = self.logic.generateMaskedNode(past1VolumeNode, breastMaskNode)
-#         if past1MaskedNode:
-#           past1VolumeNode = past1MaskedNode
-#       self.logic.renderVolume(past1VolumeNode, "ViewPast1VR")
-#         
-#     past2Node = self.past2ImgSelector.currentNode()
-#     if self.logic.isValidSubtractImageInput(past2Node):
-#       past2DiffNodes = self.logic.generateSubtractionImages(past2Node)
-#       self.past2DiffNodes = past2DiffNodes
-#       '''
-#       past2Widgets = self.getSliceWidgets("Past2")
-#       for widget in past2Widgets:
-#         self.updateSliceWidget(widget, "Background", past2DiffNodes[0].GetID())
-#         self.updateSliceWidget(widget, "Foreground", None)
-#       '''
-#       self.updatePast2Widgets()
-#       past2VolumeNode = past2DiffNodes[0]
-#       if breastMaskNode:
-#         past2MaskedNode = self.logic.generateMaskedNode(past2VolumeNode, breastMaskNode)
-#         if past2MaskedNode:
-#           past2VolumeNode = past2MaskedNode
-#       self.logic.renderVolume(past2VolumeNode, "ViewPast2VR")
-#===============================================================================
-      
       
   def onConvertMapToLabelButton(self):
     currentLabelNode = self.logic.convertMapToLabel(self.currentMapSelector.currentNode())
@@ -782,6 +688,12 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       posIjk[2-rasIndex] = iSlice
       posRas = ijkToRas.MultiplyPoint(posIjk)
       sliceLogic.SetSliceOffset(posRas[rasIndex])
+      
+  def initializeLabelSummary(self):
+    # Create table.
+    self.model = qt.QStandardItemModel()
+    self.labelSummaryTableView.setModel(self.model)
+    self.labelSummaryTableView.verticalHeader().visible = False
       
   def initializeStats(self):
     # Create table.
@@ -947,7 +859,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     for iStudy in range(1, len(studies)):
       if not studies[iStudy].maskNode:
         studies[iStudy].maskNode = studies[0].maskNode
-    
+        
     return studies
   
     
@@ -1138,94 +1050,6 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
       study.maskedDiffNode = self.generateMaskedNode(study.diffNodes[0], study.maskNode)
          
 
-  #=============================================================================
-  # def generateSubtractionImages(self, inputNode):
-  #   nodeName = inputNode.GetName()
-  #   parts = nodeName.split("_")
-  #   if params.pastImageTag in parts:
-  #     # Past series.
-  #     seriesIndex = params.pastImageFilenameParts.SeriesNumber
-  #     prePostfix = params.preContrastSeriesNameTag + "_" + params.registrationStepTag
-  #     # prePostfix = "_Sag.VIBRANT.MPH_reg"      
-  #     if params.motionCorrectionStepTag in parts:
-  #       # Motion corrected.
-  #       postPostfix = params.postContrastSeriesNameTag + "_" + params.motionCorrectionStepTag + "_" + params.registrationStepTag
-  #       # postPostfix = "Sag.VIBRANT.MPH_mc_reg"
-  #     else:
-  #       postPostfix = params.postContrastSeriesNameTag + "_" + params.registrationStepTag
-  #       # postPostfix = "Sag.VIBRANT.MPH_reg"
-  #   else:
-  #     # Current series.
-  #     seriesIndex = params.currentImageFilenameParts.SeriesNumber
-  #     prePostfix = params.preContrastSeriesNameTag
-  #     # prePostfix = "_Sag.VIBRANT.MPH"
-  #     if params.motionCorrectionStepTag in parts:
-  #       postPostfix = params.postContrastSeriesNameTag + "_" + params.motionCorrectionStepTag
-  #       # postPostfix = "Sag.VIBRANT.MPH_mc"
-  #     else:
-  #       postPostfix = postContrastSeriesNameTag
-  #       # postPostfix = "Sag.VIBRANT.MPH"    
-  #   
-  #   print len(parts[seriesIndex])
-  #   if len(parts[seriesIndex]) != 3:
-  #     # Series number is < 3 characters long -> not a pre- or post-contrast image series.
-  #     logging.info("Error in generateSubtractionImages: series number is not 3 digits long")
-  #     return
-  # 
-  #   # Get pre-contrast image by series number. 
-  #   # Expecting 3 digits ending with 0 (e.g., 600).
-  #   # Also expecting node name to end in "_Sag.VIBRANT.MPH"
-  #   parts[seriesIndex] = parts[seriesIndex][0:2]+'0'
-  #   series0 = parts[seriesIndex]
-  #   img0Name = ('_').join(parts[0:seriesIndex+1]) + prePostfix
-  #   print img0Name
-  #   img0Data = slicer.util.getNode(img0Name).GetImageData()
-  #  
-  #   diffNodes = []
-  #   for i in range(4):  # Assume 4 post-contrast images.
-  #     # Get series number. Expecting 3 digits (e.g., 601).
-  #     # Also expecting node name to end in "_Ph[N]Sag.VIBRANT.MPH"
-  #     # where [N] is between 1-4.
-  #     parts[seriesIndex] = parts[seriesIndex][0:2]+str(i+1)
-  #     seriesN = parts[seriesIndex]
-  #     imgName = ('_').join(parts[0:seriesIndex+1]) + "_Ph" + str(i+1) + postPostfix
-  #     print imgName
-  #     
-  #     # Subtract the pre-contrast image from this image.
-  #     imgData = slicer.util.getNode(imgName).GetImageData()
-  #     
-  #     # Set up VTK subtraction filter.
-  #     img0Cast = vtk.vtkImageCast()
-  #     img0Cast.SetInputData(img0Data)
-  #     img0Cast.SetOutputScalarType(imgData.GetScalarType())
-  #     img0Cast.ClampOverflowOn()        
-  #     diffFilter = vtk.vtkImageMathematics()
-  #     diffFilter.SetOperationToSubtract()
-  #     diffFilter.SetInputConnection(1, img0Cast.GetOutputPort())  
-  #     #diffFilter.SetInputData(1, img0Data)
-  #     diffFilter.SetInputData(0, imgData)
-  #     diffFilter.Update()
-  #     
-  #     # Check to see if there's already an output node.
-  #     newName = ('_').join(parts[0:seriesIndex])+"_"+seriesN+"-"+series0
-  #     outputNode = slicer.util.getNode(newName)
-  #     if not outputNode:
-  #       outputNode = self.createOutputVolumeNode(newName, 'Grey')
-  #     self.connectImageDataToOutputNode(inputNode, outputNode, diffFilter.GetOutput())
-  #     
-  #     # Change display properties (don't show negative values).
-  #     scalarRange = diffFilter.GetOutput().GetScalarRange()
-  #     displayNode = outputNode.GetDisplayNode()
-  #     displayNode.SetAutoWindowLevel(0)
-  #     displayNode.SetThreshold(0, scalarRange[1])
-  #     displayNode.SetWindowLevelMinMax(0, scalarRange[1])
-  #     
-  #     diffNodes.append(outputNode)
-  #     
-  #   return diffNodes
-  # 
-  #=============================================================================
-
   def convertMapToLabel(self, lesionMapNode):
       
     if not lesionMapNode:
@@ -1247,7 +1071,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     newName = ('_').join(parts[0:seriesIndex])+"_label"
     outputNode = slicer.util.getNode(newName)
     if not outputNode:
-      outputNode = self.createOutputLabelNode(newName, 'GenericAnatomyColors')    
+      outputNode = self.createOutputLabelNode(newName, 'GenericColors')    
     self.connectImageDataToOutputNode(lesionMapNode, outputNode, thresh.GetOutput())
       
     return outputNode
@@ -1292,7 +1116,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     newName = labelName + "_islands"
     outputNode = slicer.util.getNode(newName)
     if not outputNode:            
-      outputNode = self.createOutputLabelNode(newName, 'GenericAnatomyColors')    
+      outputNode = self.createOutputLabelNode(newName, 'GenericColors')    
     self.connectImageDataToOutputNode(labelNode, outputNode, outputImageData)
     
     castOut.SetOutput( None )
@@ -1300,18 +1124,31 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     return outputNode
 
 
-  def createOutputLabelNode(self, name, colorTable='GenericAnatomyColors'):
+  def createOutputLabelNode(self, name, colorTable='GenericColors'):
     # Create new nodes to hold, display and store the output image.
     outputNode = slicer.vtkMRMLLabelMapVolumeNode()
     outputNode.SetName(name)
     slicer.mrmlScene.AddNode(outputNode)
+    self.initializeOutputLabelNodeDisplayAndStorage(outputNode, colorTable)
+    return outputNode
+  
+  def initializeOutputLabelNodeDisplayAndStorage(self, outputNode, colorTable='GenericColors'):
+    # Set colour table and add to display.
     colorNode = slicer.util.getNode(colorTable)
     displayNode = slicer.vtkMRMLLabelMapVolumeDisplayNode()
     slicer.mrmlScene.AddNode(displayNode)
     displayNode.SetAndObserveColorNodeID(colorNode.GetID())
     outputNode.SetAndObserveDisplayNodeID(displayNode.GetID())
     outputNode.CreateDefaultStorageNode()
-    return outputNode
+    
+  def initializeOutputLabelNode(self, labelNode, volumeNode):
+    ras2ijk = vtk.vtkMatrix4x4()
+    ijk2ras = vtk.vtkMatrix4x4()
+    volumeNode.GetRASToIJKMatrix(ras2ijk)
+    volumeNode.GetIJKToRASMatrix(ijk2ras)
+    labelNode.SetRASToIJKMatrix(ras2ijk)
+    labelNode.SetIJKToRASMatrix(ijk2ras)
+    imageData = vtk.vtkImageData()
   
   def createOutputVolumeNode(self, name, colorTable='Grey'):
     # Create new nodes to hold, display and store the subtraction image.
@@ -1385,7 +1222,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     newName = multiLabelNodeName + "_" + str(labelValue)
     outputNode = slicer.util.getNode(newName)
     if not outputNode:            
-      outputNode = self.createOutputLabelNode(newName, 'GenericAnatomyColors')    
+      outputNode = self.createOutputLabelNode(newName, 'GenericColors')    
     self.connectImageDataToOutputNode(multiLabelNode, outputNode, outputImageData)
 
     connectivity.SetOutput( None )
@@ -1509,27 +1346,19 @@ class TrackLesionsTest(ScriptedLoadableModuleTest):
     #
     # first, get some data
     #
-    import urllib
-    downloads = (
-        ('http://slicer.kitware.com/midas3/download?items=5767', 'FA.nrrd', slicer.util.loadVolume),
-        )
-
-    for url,name,loader in downloads:
-      filePath = slicer.app.temporaryPath + '/' + name
-      if not os.path.exists(filePath) or os.stat(filePath).st_size == 0:
-        logging.info('Requesting download %s from %s...\n' % (name, url))
-        urllib.urlretrieve(url, filePath)
-      if loader:
-        logging.info('Loading %s...' % (name,))
-        loader(filePath)
+    testFolder = "D:\\Work\\BreastCAD\\TestData\\TestPipeline\\Lara\Invasive\\7184_7420191_6975224_6791512"
+    for root, dirs, files in os.walk(testFolder):
+      for file in files:
+        if file.endswith(".mha"):
+          slicer.util.loadVolume(os.path.join(root, file))
     self.delayDisplay('Finished with download and loading')
 
-    volumeNode = slicer.util.getNode(pattern="FA")
-    logic = TrackLesionsLogic()
-    self.assertTrue( logic.hasImageData(volumeNode) )
-    self.delayDisplay('Test passed!')
+#     volumeNode = slicer.util.getNode(pattern="FA")
+#     logic = TrackLesionsLogic()
+#     self.assertTrue( logic.hasImageData(volumeNode) )
+#     self.delayDisplay('Test passed!')
     
-#import vtk, qt, ctk, slicer
+
 import string
 import SimpleITK as sitk
 import sitkUtils

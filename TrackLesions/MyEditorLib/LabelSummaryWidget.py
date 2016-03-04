@@ -116,10 +116,11 @@ class LabelSummaryWidget(qt.QWidget):
 
     # structures view
 
-    self.structuresView = qt.QTableView()
+    #self.structuresView = qt.QTableView()
+    self.structuresView = qt.QTreeView()
     self.structuresView.objectName = 'StructuresView'
     self.structuresView.sortingEnabled = True
-    self.structuresView.minimumHeight = 200
+    #self.structuresView.minimumHeight = 200
     layout.addWidget(self.structuresView)
 
     # all buttons frame
@@ -420,9 +421,9 @@ class LabelSummaryWidget(qt.QWidget):
     for i in range(5):
       self.structuresView.resizeColumnToContents(i)
 
-    self.structures.setHeaderData(0,1,"Number")
+    self.structures.setHeaderData(0,1,"Contour")
     self.structures.setHeaderData(1,1,"Color")
-    self.structures.setHeaderData(2,1,"Name")
+    self.structures.setHeaderData(2,1,"Label")
     self.structures.setHeaderData(3,1,"Label Volume")
     self.structures.setHeaderData(4,1,"Slice")
     self.structuresView.setModel(self.structures)

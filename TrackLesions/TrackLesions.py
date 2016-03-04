@@ -7,7 +7,7 @@ from slicer.ScriptedLoadableModule import *
 import logging
 import MyEditor
 from MyEditorLib.EditUtil import EditUtil
-import TrackLesionsParams as params
+import TrackLesionsParams_LongitudinalStudy as params
 import LabelStatsLogic
 
 
@@ -169,6 +169,8 @@ past2FourUpViewId = 504
 # TrackLesions
 #
 
+LONG_STUDY_FLAG = True
+
 class TrackLesions(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
@@ -181,9 +183,8 @@ class TrackLesions(ScriptedLoadableModule):
     self.parent.dependencies = ["Data"]
     self.parent.contributors = ["Maggie Kusano (Martel Group)"] # replace with "Firstname Lastname (Organization)"
     self.parent.helpText = """
-    This is a scripted loadable module bundled in an extension.
-    It calculates subtraction images and segments lesion probabiliy maps from
-    registered DCE-MRI data.
+    This is a scripted loadable module bundled in an extension that has been
+    customized for longitudinal DCE-MRI breast studies. 
     """
     self.parent.acknowledgementText = """
     Thanks for being patient while using this work-in-progress :).
@@ -215,6 +216,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.currentDiffNodes = None
     self.past1DiffNodes = None
     self.past2DiffNodes = None    
+    self.studies = []
 
     layoutManager = slicer.app.layoutManager()
     layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
@@ -230,44 +232,88 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.resetUI()
            
     #
-    # Parameters Area
+    # Patient area
     #
-    parametersCollapsibleButton = ctk.ctkCollapsibleButton()
-    parametersCollapsibleButton.text = "Parameters"
-    self.layout.addWidget(parametersCollapsibleButton)
-
-    # Layout within the dummy collapsible button
-    parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
+    patientCollapsibleButton = ctk.ctkCollapsibleButton()
+    patientCollapsibleButton.text = "Patient"
+    self.layout.addWidget(patientCollapsibleButton)
+    patientFormLayout = qt.QFormLayout(patientCollapsibleButton)
+    
+    # Patient selector
+    self.openPatientButton = qt.QPushButton("Select Patient Folder")
+    patientFormLayout.addRow(self.openPatientButton)
+    
+    """
+    # Patient info
+    self.patientLayoutBox = qt.QGroupBox("Patient info")
+    self.patientLayoutBox.setLayout(qt.QFormLayout())    
+    self.patientIdLabel = qt.QLabel()
+    self.patientIdLabel.setText("<Select patient>")
+    #self.patientIdLabel.setAlignment(qt.Qt.AlignLeft | qt.Qt.AlignVCenter)
+    self.patientLayoutBox.layout().addRow("Patient ID:", self.patientIdLabel)
+    self.currentLabel = qt.QLabel()
+    self.currentLabel.setText("")
+    self.patientLayoutBox.layout().addRow("Current accession (date):", self.currentLabel)
+    self.past1Label = qt.QLabel()
+    self.past1Label.setText("")
+    self.patientLayoutBox.layout().addRow("Past1 accession (date):", self.past1Label)
+    self.past2Label = qt.QLabel()
+    self.past2Label.setText("")
+    self.patientLayoutBox.layout().addRow("Past2 accession (date):", self.past2Label)
+    patientFormLayout.addRow(self.patientLayoutBox)
+    """
+    
+    # Patient info
+    self.patientLayoutBox = qt.QGroupBox("Patient info")
+    self.patientLayoutBox.setLayout(qt.QFormLayout())    
+    self.patientIdLabel = qt.QLabel()
+    self.patientIdLabel.setText("<Select patient>")
+    #self.patientIdLabel.setAlignment(qt.Qt.AlignLeft | qt.Qt.AlignVCenter)
+    self.patientLayoutBox.layout().addRow("Patient ID:", self.patientIdLabel)    
+    self.patientInfoView = qt.QTreeView()
+    self.patientInfoView.sortingEnabled = False
+    self.patientLayoutBox.layout().addRow(self.patientInfoView)
+    self.setPatientInfo(reset=True)
+#     self.patientInfoModel = qt.QStandardItemModel()
+#     for iRow, timePoint in enumerate(self.timePoints):
+#       item = qt.QStandardItem()
+#       item.setText(timePoint)
+#       self.patientInfoModel.setItem(iRow, 0, item)
+#     self.patientInfoModel.setHeaderData(0, 1, "Study")
+#     self.patientInfoModel.setHeaderData(1, 1, "Accession No.")
+#     self.patientInfoModel.setHeaderData(2, 1, "Date")      
+#     self.patientInfoView.setModel(self.patientInfoModel)
+#     for i in range(3):
+#       self.patientInfoView.resizeColumnToContents(i)   
+    patientFormLayout.addRow(self.patientLayoutBox)
     
     #
-    # Patient selector
+    # View area
     #
-    self.openPatientButton = qt.QPushButton("Select Folder")
-    parametersFormLayout.addRow("CAD patient:", self.openPatientButton)
-        
-    #
-    # View selector
-    #
-    self.viewLayoutBox = qt.QGroupBox()
-    self.viewLayoutBox.setLayout(qt.QFormLayout())
+    viewCollapsibleButton = ctk.ctkCollapsibleButton()
+    viewCollapsibleButton.text = "View"
+    self.layout.addWidget(viewCollapsibleButton)
+    viewFormLayout = qt.QFormLayout(viewCollapsibleButton)
+    
+    # View group box
+    self.viewRadioBox = qt.QGroupBox("View")
+    self.viewRadioBox.setLayout(qt.QHBoxLayout())
     self.compareViewRadioButton = qt.QRadioButton()
-    self.viewLayoutBox.layout().addWidget(self.compareViewRadioButton)    
-    self.compareViewRadioButton.text = "Compare (sagittal side-by-side)"
+    self.viewRadioBox.layout().addWidget(self.compareViewRadioButton)    
+    self.compareViewRadioButton.text = "Compare"
     self.currentViewRadioButton = qt.QRadioButton()
-    self.viewLayoutBox.layout().addWidget(self.currentViewRadioButton)
-    self.currentViewRadioButton.text = "Current only (4-up)"
+    self.viewRadioBox.layout().addWidget(self.currentViewRadioButton)
+    self.currentViewRadioButton.text = "Current"
     self.past1ViewRadioButton = qt.QRadioButton()
-    self.viewLayoutBox.layout().addWidget(self.past1ViewRadioButton)
-    self.past1ViewRadioButton.text = "Past1 only (4-up)"
+    self.viewRadioBox.layout().addWidget(self.past1ViewRadioButton)
+    self.past1ViewRadioButton.text = "Past1"
     self.past2ViewRadioButton = qt.QRadioButton()
-    self.viewLayoutBox.layout().addWidget(self.past2ViewRadioButton)
-    self.past2ViewRadioButton.text = "Past2 only (4-up)"     
+    self.viewRadioBox.layout().addWidget(self.past2ViewRadioButton)
+    self.past2ViewRadioButton.text = "Past2"     
     self.compareViewRadioButton.checked = True
-    parametersFormLayout.addRow("View:", self.viewLayoutBox)
+    viewFormLayout.addRow(self.viewRadioBox)
         
-    #
     # Slice selector
-    #
     self.inputSliceLabel = qt.QLabel("Jump to slice:")
     self.inputSliceLabel.setToolTip("Navigate sagittal views to the selected slice.")
     self.inputSliceSelector = qt.QSpinBox()
@@ -276,25 +322,35 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.inputSliceSelector.maximum = (1)
     self.inputSliceSelector.value = (1)
     self.inputSliceSelector.setToolTip("Navigate sagittal views to the selected slice.")
-    parametersFormLayout.addRow(self.inputSliceLabel, self.inputSliceSelector)
-     
+    viewFormLayout.addRow(self.inputSliceLabel, self.inputSliceSelector)
+    
+    # Reset windowing button
+    self.resetWindowingButton = qt.QPushButton("Reset Windowing")
+    self.resetWindowingButton.toolTip = "Reset windowing of subtraction images to default values."
+    self.resetWindowingButton.enabled = True
+    viewFormLayout.addRow(self.resetWindowingButton)
+         
+    # Reset views button
+    self.resetViewsButton = qt.QPushButton("Reset Data in Views")
+    self.resetViewsButton.toolTip = "Load default volumes in views."
+    self.resetViewsButton.enabled = True
+    viewFormLayout.addRow(self.resetViewsButton)
+             
     #
-    # Contour Area
+    # Contour area
     #
     contourCollapsibleButton = ctk.ctkCollapsibleButton()
-    contourCollapsibleButton.text = "Contour lesions"
+    contourCollapsibleButton.text = "Contour"
     self.layout.addWidget(contourCollapsibleButton)
-
-    # Layout within the dummy collapsible button
     contourFormLayout = qt.QFormLayout(contourCollapsibleButton)
     
-    self.editBoxFrame = qt.QFrame()
+    # Edit tools
+    self.editBoxFrame = qt.QGroupBox("Contouring tools")
     self.editBoxFrame.objectName = 'EditBoxFrame'
     self.editBoxFrame.setLayout(qt.QVBoxLayout())
     contourFormLayout.addRow(self.editBoxFrame)
     self.editor = MyEditor.EditorWidget(self.editBoxFrame, False)
-   
-               
+     
     #
     # Analysis Area
     #
@@ -309,10 +365,10 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     #
     # Calculate subtraction images button
     #
-    self.subtractImagesButton = qt.QPushButton("Calculate subtraction images")
-    self.subtractImagesButton.toolTip = "Subtract pre-contrast image from post-contrast images."
-    self.subtractImagesButton.enabled = True
-    analysisFormLayout.addRow(self.subtractImagesButton)
+    self.Button = qt.QPushButton("Calculate subtraction images")
+    self.Button.toolTip = "Subtract pre-contrast image from post-contrast images."
+    self.Button.enabled = True
+    analysisFormLayout.addRow(self.Button)
         
     #
     # Find islands button
@@ -363,11 +419,13 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.compareViewRadioButton.connect('clicked()', self.onViewSelected)
     self.currentViewRadioButton.connect('clicked()', self.onViewSelected)
     self.past1ViewRadioButton.connect('clicked()', self.onViewSelected)
-    self.past2ViewRadioButton.connect('clicked()', self.onViewSelected)         
+    self.past2ViewRadioButton.connect('clicked()', self.onViewSelected) 
+    self.resetWindowingButton.connect('clicked()', self.onResetWindowing)  
+    self.resetViewsButton.connect('clicked()', self.onResetViews)      
     self.findIslandsButton.connect('clicked(bool)', self.onConvertMapToLabelButton)
     self.saveIslandsButton.connect('toggled(bool)', self.onSaveIslandsButtonToggled)
     self.queryIslandsButton.connect('toggled(bool)', self.onQueryIslandsButtonToggled)    
-    self.subtractImagesButton.connect('clicked(bool)', self.onSubtractImagesButton)
+    self.Button.connect('clicked(bool)', self.onButton)
       
     self.styleObserverTags = []
     self.sliceWidgetsPerStyle = {}    
@@ -413,7 +471,52 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     if crosshairNode:
       crosshairNode.SetCrosshairMode(5)
       crosshairNode.SetNavigation(1)
-       
+      
+
+  def resetParameterNode(self):
+    # Reset current patient.
+    self.setPatientInfo(reset=True)
+#     self.patientIdLabel.setText("<Select patient>")
+#     self.currentLabel.setText("")
+#     self.past1Label.setText("")
+#     self.past2Label.setText("")
+
+    # Set view to current.
+    self.compareViewRadioButton.checked = True
+    self.setSliceSelector(minVal=1, maxVal=1, value=1)    
+    
+    # Reset editor.
+    self.editor.resetInterface()
+    
+    
+  def setPatientInfo(self, reset=False):
+    if len(self.studies) == 0:
+      reset = True
+    if reset:
+      patientId = "<Select patient>"
+    else:
+      patientId = self.studies[0].patientId
+    self.patientIdLabel.setText(patientId)
+    self.patientInfoModel = qt.QStandardItemModel()
+    for iRow, timePoint in enumerate(self.timePoints):
+      item = qt.QStandardItem()
+      item.setText(timePoint)
+      self.patientInfoModel.setItem(iRow, 0, item)
+      if not reset and len(self.studies) > 0:
+        if self.studies[iRow]:
+          item = qt.QStandardItem()
+          item.setText(self.studies[iRow].accessionNo)
+          self.patientInfoModel.setItem(iRow, 1, item)
+          item = qt.QStandardItem()
+          item.setText(self.studies[iRow].studyDate)
+          self.patientInfoModel.setItem(iRow, 2, item)
+    self.patientInfoModel.setHeaderData(0, 1, "Study")
+    self.patientInfoModel.setHeaderData(1, 1, "Accession No.")
+    self.patientInfoModel.setHeaderData(2, 1, "Date")      
+    self.patientInfoView.setModel(self.patientInfoModel)
+    for i in range(self.patientInfoModel.columnCount()):
+      self.patientInfoView.resizeColumnToContents(i) 
+    
 
   def onViewSelected(self):
     if self.compareViewRadioButton.checked:
@@ -494,7 +597,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
   def onOpenPatientButton(self):
     # Prompt to close current scene if data is currently loaded.
-    if len(slicer.util.getNodes(pattern="*"+params.preContrastSeriesNameTag+"*")) > 0:
+    if len(self.studies) > 0:
       qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Close patient", 
                                         "Close the current patient? \nUnsaved changes will be lost.", 
                                         qt.QMessageBox.Ok, qt.QMessageBox.Cancel)
@@ -503,7 +606,8 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       else:
         slicer.mrmlScene.Clear(0)
         self.resetUI()
-        
+        self.resetParameterNode(
+                                )
     # Pop up open data dialog.
     slicer.util.openAddDataDialog()
     
@@ -516,9 +620,30 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       # TODO: Disable processing buttons
       return
     
+    # Set current patient in parameter node.
+#     self.patientIdLabel.setText(self.studies[0].patientId)
+#     self.currentLabel.setText(self.studies[0].accessionNo +
+#                               " ("+self.studies[0].studyDate + ")")
+#     self.past1Label.setText(self.studies[1].accessionNo +
+#                             " (" + self.studies[1].studyDate + ")")
+#     self.past2Label.setText(self.studies[2].accessionNo +
+#                             " (" + self.studies[2].studyDate + ")")
+    self.setPatientInfo()
+    
     for iStudy, study in enumerate(self.studies):
-      # Calculate subtraction images.
-      self.logic.calculateSubtractionImages(study)
+      if not LONG_STUDY_FLAG:
+        # Calculate subtraction images.
+        self.logic.calculateSubtractionImages(study)
+      else:
+        # Set windowing of subtraction images (don't show negative values).
+        for volumeNode in study.diffNodes:
+          imageData = vtk.vtkImageData()
+          imageData = volumeNode.GetImageData()      
+          scalarRange = imageData.GetScalarRange()
+          displayNode = volumeNode.GetDisplayNode()
+          displayNode.SetAutoWindowLevel(0)
+          #displayNode.SetThreshold(0, scalarRange[1])
+          displayNode.SetWindowLevelMinMax(0, scalarRange[1])
       
       # Set up label nodes for lesion contouring.
       volumeNode = study.diffNodes[0]
@@ -536,7 +661,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.resetUI()
       
     # Set slice selector.
-    dims = self.studies[0].preContrastNode.GetImageData().GetDimensions()
+    dims = self.studies[0].diffNodes[0].GetImageData().GetDimensions()
     maxSliceNo = dims[2]+1
     curSliceNo = round(maxSliceNo/2)
     self.setSliceSelector(minVal=1, maxVal=maxSliceNo, value=curSliceNo)
@@ -545,7 +670,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     EditUtil.setActiveVolumes(self.studies[0].diffNodes[0], self.studies[0].labelNode)
     EditUtil.setLabel(1)
     self.editor.setMergeNode(self.studies[0].labelNode)
-
 
 
   def setSliceSelector(self, minVal=None, maxVal=None, value=None):
@@ -566,6 +690,100 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     slice = self.inputSliceSelector.value
     self.setSlice(slice)
     
+    
+  def onResetWindowing(self):
+    for study in self.studies:
+      for volumeNode in study.diffNodes:
+        self.setWindowing(volumeNode, 0)
+#           imageData = vtk.vtkImageData()
+#           imageData = volumeNode.GetImageData()      
+#           scalarRange = imageData.GetScalarRange()
+#           displayNode = volumeNode.GetDisplayNode()
+#           displayNode.SetAutoWindowLevel(0)
+#           displayNode.SetWindowLevelMinMax(0, scalarRange[1])
+        
+  def setWindowing(self, volumeNode, winMin=None, winMax=None):  
+    imageData = vtk.vtkImageData()
+    imageData = volumeNode.GetImageData()
+    displayNode = volumeNode.GetDisplayNode()
+    if not imageData or not displayNode:
+      return
+    if winMin == None and winMax == None:
+      displayNode.SetAutoWindowLevel(1)
+    else:
+      scalarRange = imageData.GetScalarRange()
+      if winMin == None:
+        winMin = scalarRange[0]
+      if winMax == None:
+        winMax = scalarRange[1]
+      if winMin > winMax:
+        return        
+      displayNode.SetAutoWindowLevel(0)
+      #displayNode.SetThreshold(winMin, winMax)
+      displayNode.SetWindowLevelMinMax(winMin, winMax)
+      
+
+  def onResetViews(self):
+    # Attach volume and label nodes to each compound view node.
+    if len(self.studies) == 0:
+      # Sort nodes into separate studies.
+      self.logic = TrackLesionsLogic()
+      self.studies = self.logic.sortVolumeNodes()
+      if len(self.studies) == 0:
+        qt.QMessageBox.warning(slicer.util.mainWindow(), "Reset views",
+                               "Incomplete patient folder. \nPlease try reloading data.")
+        # TODO: Disable processing buttons
+        return
+      
+      # Set current patient in parameter node.
+#       self.patientIdLabel.setText(self.studies[0].patientId)
+#       self.currentLabel.setText(self.studies[0].accessionNo +
+#                                 " ("+self.studies[0].studyDate + ")")
+#       self.past1Label.setText(self.studies[1].accessionNo +
+#                               " (" + self.studies[1].studyDate + ")")
+#       self.past2Label.setText(self.studies[2].accessionNo +
+#                               " (" + self.studies[2].studyDate + ")")
+
+    self.setPatientInfo()
+      
+    for iStudy, study in enumerate(self.studies):
+      if not LONG_STUDY_FLAG:
+        # Calculate subtraction images.
+        self.logic.calculateSubtractionImages(study)
+      else:
+        # Set windowing of subtraction images (don't show negative values).
+        for volumeNode in study.diffNodes:
+          self.setWindowing(volumeNode, 0)
+      
+      # Set up label nodes for lesion contouring.
+      if not study.labelNode:
+        volumeNode = study.diffNodes[0]
+        labelNodeName = volumeNode.GetName() + "_label"
+        labelNode = slicer.modules.volumes.logic().CreateAndAddLabelVolume(slicer.mrmlScene, volumeNode, labelNodeName)
+        colorNode = slicer.util.getNode('GenericColors')
+        labelNode.GetDisplayNode().SetAndObserveColorNodeID(colorNode.GetID())
+        study.labelNode = labelNode
+      
+      # Attach to slice and volume displays.
+      self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
+      if not study.maskedDiffNode:
+        self.logic.maskFirstDiffNodeForVR(study)
+      self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
+    
+    self.resetUI()
+      
+    # Set slice selector.
+    dims = self.studies[0].diffNodes[0].GetImageData().GetDimensions()
+    maxSliceNo = dims[2]+1
+    curSliceNo = round(maxSliceNo/2)
+    self.setSliceSelector(minVal=1, maxVal=maxSliceNo, value=curSliceNo)
+    
+    # Enable lesion contouring.
+    EditUtil.setActiveVolumes(self.studies[0].diffNodes[0], self.studies[0].labelNode)
+    EditUtil.setLabel(1)
+    self.editor.setMergeNode(self.studies[0].labelNode)    
+    
+        
   #
   # Contouring methods
   #
@@ -594,7 +812,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       self.logic.renderVolume(study.maskedDiffNode, widget)
 
     
-  def onSubtractImagesButton(self):
+  def onButton(self):
     for iStudy, study in enumerate(self.studies):
       self.logic.calculateSubtractionImages(study)
       self.logic.maskFirstDiffNodeForVR(study)
@@ -839,20 +1057,36 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     """
     
     studies = []
-    
-    # Get all pre-contrast nodes (should be one per study).
-    preContrastNodeDict = slicer.util.getNodes(pattern="*"+params.preContrastSeriesNameTag+"*")
-    nSeries = len(preContrastNodeDict)
-    if nSeries == 0:
-      return studies
-    preContrastNodeNames = sorted(preContrastNodeDict.keys(), reverse=True)
-    
-    # Get all volume nodes associated with this pre-contrast volume. 
-    for name in preContrastNodeNames:
-      preContrastNode = preContrastNodeDict[name]
-      study = self.getStudyVolumeNodes(preContrastNode)
-      if study:
-        studies.append(study)
+    if LONG_STUDY_FLAG:
+      # Get all w/o fat sat nodes (should be one per study).
+      woFSNodeDict = slicer.util.getNodes(pattern="*"+params.woFatSatSeriesNameTag)
+      nSeries = len(woFSNodeDict)
+      if nSeries == 0:
+        return studies
+      woFSNodeNames = sorted(woFSNodeDict.keys(), reverse=True)
+      
+      # Get all volume nodes associated with this pre-contrast volume. 
+      for name in woFSNodeNames:
+        parts = name.split("_")
+        accession_no = parts[params.imageFilenameParts.AccessionNumber]
+        study = self.getStudyVolumeNodesLongStudy(accession_no)
+        if study:
+          studies.append(study)
+          
+    else:
+      # Get all pre-contrast nodes (should be one per study).
+      preContrastNodeDict = slicer.util.getNodes(pattern="*"+params.preContrastSeriesNameTag+"*")
+      nSeries = len(preContrastNodeDict)
+      if nSeries == 0:
+        return studies
+      preContrastNodeNames = sorted(preContrastNodeDict.keys(), reverse=True)
+      
+      # Get all volume nodes associated with this pre-contrast volume. 
+      for name in preContrastNodeNames:
+        preContrastNode = preContrastNodeDict[name]
+        study = self.getStudyVolumeNodes(preContrastNode)
+        if study:
+          studies.append(study)
         
     # Some previous studies don't have registered breast masks.  Use the
     # current study's breast mask if missing.
@@ -878,15 +1112,17 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
       # Past series.
       seriesIndex = params.pastImageFilenameParts.SeriesNumber
       patientId = parts[params.pastImageFilenameParts.PatientID]
+      studyDate = parts[params.pastImageFilenameParts.SeriesDate]    
       accessionNo = parts[params.pastImageFilenameParts.AccessionNumber]
     else:
       # Current series.
       seriesIndex = params.currentImageFilenameParts.SeriesNumber
       patientId = parts[params.currentImageFilenameParts.PatientID]
+      studyDate = parts[params.currentImageFilenameParts.SeriesDate]
       accessionNo = parts[params.currentImageFilenameParts.AccessionNumber]
     prefix = ('_').join(parts[0:seriesIndex])
       
-    study = CADStudy(patientId, accessionNo)
+    study = CADStudy(patientId, studyDate, accessionNo)
     study.preContrastNode = preContrastNode
       
     # Find post-contrast nodes.
@@ -911,6 +1147,52 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     maskNodeName = ""
     if maskNode:
       study.maskNode = maskNode
+
+    return study
+
+  def getStudyVolumeNodesLongStudy(self, accession_no):
+    """
+    Extracts names of all required volume nodes for each study based on
+    accession number:
+      wo fat sat series
+      subtraction series (4 nodes)
+      lesion map (optional)
+      breast mask (optional)
+    Returns True if wo fat sat and 4 subtraction nodes are found.
+    """
+    # Get all volume nodes with accession number in name.
+    nodeDict = slicer.util.getNodes(pattern="*" + accession_no + "*")
+    nNodes = len(nodeDict)
+    if nNodes < 4:
+      logging.info(("{0}: {1} nodes found").format(accession_no, str(nNodes)))
+      return False
+    nodeName = nodeDict.keys()[0]
+    parts = nodeName.split("_")
+    patientId = parts[params.imageFilenameParts.PatientID]
+    studyDate = parts[params.imageFilenameParts.SeriesDate]
+    accessionNo = parts[params.imageFilenameParts.AccessionNumber]
+    prefix = ('_').join(parts[0:params.imageFilenameParts.SeriesID])
+    study = CADStudy(patientId, studyDate, accessionNo)
+
+      
+    # Find subtraction nodes.
+    pattern = prefix + params.subtractionSeriesNameTag
+    subtractionNodeDict = slicer.util.getNodes(pattern=pattern)
+    nNodes = len(subtractionNodeDict)
+    if nNodes != 4:
+      logging.info(("{0}: {1} subtraction nodes found").format(accession_no, str(nNodes)))
+    nodeNames = sorted(subtractionNodeDict.keys())
+    study.diffNodes = []
+    for name in nodeNames:
+      study.diffNodes.append(subtractionNodeDict[name])
+      
+    # Find breast mask.
+    pattern = prefix + params.maskSeriesNameTag
+    maskNodeDict = slicer.util.getNodes(pattern=pattern)
+    nNodes = len(maskNodeDict)
+    if nNodes != 1:
+      logging.info(("{0}: {1} mask nodes found").format(accession_no, str(nNodes)))
+    study.maskNode = maskNodeDict.values()[0]
 
     return study
 
@@ -1037,7 +1319,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
       scalarRange = diffFilter.GetOutput().GetScalarRange()
       displayNode = outputNode.GetDisplayNode()
       displayNode.SetAutoWindowLevel(0)
-      displayNode.SetThreshold(0, scalarRange[1])
+      #displayNode.SetThreshold(0, scalarRange[1])
       displayNode.SetWindowLevelMinMax(0, scalarRange[1])
           
       diffNodes.append(outputNode)
@@ -1287,9 +1569,9 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
       volumeRenderingDisplay = volumeRenderingLogic.CreateVolumeRenderingDisplayNode("vtkMRMLGPURayCastVolumeRenderingDisplayNode")
       volumeRenderingDisplay.SetName(volumeRenderingDisplayNodeName)
       slicer.mrmlScene.AddNode(volumeRenderingDisplay)
+      volumeRenderingDisplay.UnRegister(volumeRenderingLogic)
       volumeRenderingDisplay.RemoveAllViewNodeIDs()
       volumeRenderingDisplay.AddViewNodeID(slicer.util.getNode(widget).GetID())
-    volumeRenderingDisplay.UnRegister(volumeRenderingLogic)
     volumeRenderingDisplay.SetRaycastTechnique(2)
     volumeRenderingLogic.UpdateDisplayNodeFromVolumeNode(volumeRenderingDisplay, volumeNode)
     volumeNode.AddAndObserveDisplayNodeID(volumeRenderingDisplay.GetID())
@@ -1310,6 +1592,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
         camera = cameraNode.GetCamera()
         camera.SetPosition(-600, 0, 0)
         camera.SetViewUp(0, 0, 1)
+    cameraNodes.UnRegister(slicer.mrmlScene)
 
 
 class TrackLesionsTest(ScriptedLoadableModuleTest):
@@ -1453,8 +1736,9 @@ class LabelStatsLogic:
         self.labelStats[i,"ImageNode"] = grayscaleNode.GetName()
         
 class CADStudy:
-  def __init__(self, patId, accessionNo):
-    self.patId = patId
+  def __init__(self, patientId, studyDate, accessionNo):
+    self.patientId = patientId
+    self.studyDate = studyDate
     self.accessionNo = accessionNo
     self.preContrastNode = None
     self.postContrastNodes = None

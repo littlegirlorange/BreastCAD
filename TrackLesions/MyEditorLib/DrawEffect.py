@@ -55,7 +55,7 @@ class DrawEffectOptions(LabelEffect.LabelEffectOptions):
     self.connections.append( (self.apply, 'clicked()', self.onApply) )
 
     # Add vertical spacer
-    self.frame.layout().addStretch(0)
+    self.frame.layout().addStretch(1)
 
   def onApply(self):
     for tool in self.tools:

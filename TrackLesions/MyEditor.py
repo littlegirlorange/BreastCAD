@@ -303,8 +303,21 @@ class EditorWidget(VTKObservationMixin):
     # put the tool options below the color selector
     self.parent.layout().addWidget(self.editBoxFrame)
     self.parent.layout().addWidget(self.effectOptionsFrame)
-    self.parent.layout().addWidget(self.labelSummaryWidget)
+    
+    self.labelOptionsFrame = qt.QGroupBox("Label display options")
+    self.labelOptionsFrame.setLayout(qt.QVBoxLayout())
+    self.toggleLabelsButton = qt.QPushButton("Hide Labels")
+    self.toggleLabelsButton.setCheckable(True)
+    self.labelOptionsFrame.layout().addWidget(self.toggleLabelsButton)
+    self.toggleLabelsButton.connect('toggled(bool)', self.onToggleLabels)
+    self.toggleOutlinesButton = qt.QPushButton("Show Outline")
+    self.toggleOutlinesButton.setCheckable(True)
+    self.labelOptionsFrame.layout().addWidget(self.toggleOutlinesButton)
+    self.toggleOutlinesButton.connect('toggled(bool)', self.onToggleOutlines)
+    self.parent.layout().addWidget(self.labelOptionsFrame)
 
+    self.parent.layout().addWidget(self.labelSummaryWidget)
+    
     if self.helper:
       # add a callback to collapse/open the frame based on the validity of the label volume
       self.helper.mergeValidCommand = self.updateLabelFrame
@@ -312,39 +325,46 @@ class EditorWidget(VTKObservationMixin):
       self.helper.selectCommand = self.toolsBox.defaultEffect
 
     # Add spacer to layout
-    self.layout.addStretch(0)
+    self.layout.addStretch(1)
 
   # creates the frame for the effect options
   # assumes self.effectsToolsFrame and its layout has already been created
   def createEffectOptionsFrame(self):
 #     if not self.effectsToolsFrame:
 #       return
-    self.effectOptionsFrame = qt.QFrame(self.parent)
+    #self.effectOptionsFrame = qt.QFrame(self.parent)
+    self.effectOptionsFrame = qt.QGroupBox("Tool options", self.parent)
     self.effectOptionsFrame.objectName = 'EffectOptionsFrame'
     self.effectOptionsFrame.setLayout(qt.QVBoxLayout())
-    self.effectOptionsFrame.setContentsMargins(0, 0, 0, 0)
 
   # Creates the EditBox and its frame
   # Assumes effectOptionsFrame has already been created
   def createEditBox(self):
     if not self.effectOptionsFrame:
       self.effectOptionsFrame = self.createEffectOptionsFrame()
-    self.editBoxFrame = qt.QFrame(self.parent)
+    #self.editBoxFrame = qt.QFrame(self.parent)
+    self.editBoxFrame = qt.QGroupBox("Toolbox", self.parent)
     self.editBoxFrame.objectName = 'EditBoxFrame'
     self.editBoxFrame.setLayout(qt.QVBoxLayout())
-    self.editBoxFrame.setContentsMargins(0, 0, 0, 0)
     self.toolsBox = MyEditorLib.EditBox(self.editBoxFrame, optionsFrame=self.effectOptionsFrame)
 
   # Creates the label summary widget.
   def createLabelSummaryWidget(self):
     self.labelSummaryFrame = qt.QFrame(self.parent)
+    #self.labelSummaryFrame = qt.QGroupBox("Current contours and so much more I", self.parent)
     self.labelSummaryFrame.objectName = "LabelSummaryFrame"
     self.labelSummaryFrame.setLayout(qt.QVBoxLayout())
-    self.labelSummaryFrame.setContentsMargins(0, 0, 0, 0)
     self.labelSummaryWidget = LabelSummaryWidget(self.labelSummaryFrame)
 
   def updateLabelFrame(self, mergeVolume):
     pass
     #self.editLabelMapsFrame.collapsed = not mergeVolume
+    
+  def onToggleLabels(self, checked):
+    EditUtil.setLabelVisible(not checked)
+      
+  def onToggleOutlines(self, checked):
+    EditUtil.setLabelOutline(checked)
+  
 
   #->> TODO: check to make sure editor module smoothly handles interactive changes to the master and merge nodes

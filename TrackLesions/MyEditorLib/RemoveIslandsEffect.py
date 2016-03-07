@@ -165,7 +165,7 @@ class RemoveIslandsEffectLogic(IslandEffect.IslandEffectLogic):
     # change the label values based on the parameter node
     #
     if not self.sliceLogic:
-      self.sliceLogic = self.editUtil.getSliceLogic()
+      self.sliceLogic = self.sliceWidget.sliceLogic()
     parameterNode = self.editUtil.getParameterNode()
     minimumSize = int(parameterNode.GetParameter("IslandEffect,minimumSize"))
     fullyConnected = bool(parameterNode.GetParameter("IslandEffect,fullyConnected"))
@@ -267,7 +267,7 @@ class RemoveIslandsEffectLogic(IslandEffect.IslandEffectLogic):
     a label map while preserving the original boundary in other places.
     """
     if not self.sliceLogic:
-      self.sliceLogic = self.editUtil.getSliceLogic()
+      self.sliceLogic = self.sliceWidget.sliceLogic()
     parameterNode = self.editUtil.getParameterNode()
     self.minimumSize = int(parameterNode.GetParameter("IslandEffect,minimumSize"))
     self.fullyConnected = bool(parameterNode.GetParameter("IslandEffect,fullyConnected"))
@@ -275,8 +275,9 @@ class RemoveIslandsEffectLogic(IslandEffect.IslandEffectLogic):
     labelImage = vtk.vtkImageData()
     labelImage.DeepCopy( self.getScopedLabelInput() )
     label = self.editUtil.getLabel()
+    labelNode = self.sliceLogic.GetLabelLayer().GetVolumeNode()
 
-    slicer.modules.EditorWidget.toolsBox.undoRedo.saveState()
+    slicer.modules.EditorWidget.toolsBox.undoRedo.saveState(labelNode)
 
     self.removeIslandsMorphologyDecruft(labelImage,0,label)
     self.getScopedLabelOutput().DeepCopy(labelImage)

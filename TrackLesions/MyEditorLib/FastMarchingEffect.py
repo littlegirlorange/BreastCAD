@@ -133,7 +133,7 @@ class FastMarchingEffectOptions(Effect.EffectOptions):
 
   def percentMaxChanged(self, val):
     labelNode = self.logic.getLabelNode()
-    labelImage = EditUtil.getLabelImage()
+    labelImage = labelNode.GetImageData()
     spacing = labelNode.GetSpacing()
     if vtk.VTK_MAJOR_VERSION <= 5:
       dim = labelImage.GetDimensions()
@@ -208,8 +208,10 @@ class FastMarchingEffectLogic(Effect.EffectLogic):
 
     self.fm = None
     # allocate a new filter each time March is hit
-    bgImage = EditUtil.getBackgroundImage()
-    labelImage = EditUtil.getLabelImage()
+    bgNode = sliceLogic.GetBackgroundLayer().GetVolumeNode()
+    labelNode = sliceLogic.GetLabelLayer().GetVolumeNode()
+    bgImage = bgNode.GetImageData()
+    labelImage = labelNode.GetImageData()
 
     # collect seeds
     if vtk.VTK_MAJOR_VERSION <= 5:
@@ -288,10 +290,10 @@ class FastMarchingEffectLogic(Effect.EffectLogic):
     self.fm.Modified()
     self.fm.Update()
 
-    self.undoRedo.saveState()
+    self.undoRedo.saveState(labelNode)
 
-    EditUtil.getLabelImage().DeepCopy(self.fm.GetOutput())
-    EditUtil.markVolumeNodeAsModified(self.sliceLogic.GetLabelLayer().GetVolumeNode())
+    labelImage.DeepCopy(self.fm.GetOutput())
+    EditUtil.markVolumeNodeAsModified(labelNode)
     # print('FastMarching output image: '+str(output))
     print('FastMarching march update completed')
 
@@ -304,10 +306,13 @@ class FastMarchingEffectLogic(Effect.EffectLogic):
     self.fm.Modified()
     self.fm.Update()
 
-    EditUtil.getLabelImage().DeepCopy(self.fm.GetOutput())
-    EditUtil.getLabelImage().Modified()
+    labelNode = sliceLogic.GetLabelLayer().GetVolumeNode()
+    labelImage = labelNode.GetImageData()
+    
+    labelImage.DeepCopy(self.fm.GetOutput())
+    labelImage.Modified()
 
-    EditUtil.markVolumeNodeAsModified(self.sliceLogic.GetLabelLayer().GetVolumeNode())
+    EditUtil.markVolumeNodeAsModified(labelNode)
 
   def getLabelNode(self):
     return self.sliceLogic.GetLabelLayer().GetVolumeNode()

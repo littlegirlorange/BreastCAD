@@ -48,7 +48,8 @@ class EditColor(VTKObservationMixin):
     self.removeObservers()
 
   def create(self):
-    self.frame = qt.QFrame(self.parent)
+    #self.frame = qt.QFrame(self.parent)
+    self.frame = qt.QGroupBox("Current label", self.parent)
     self.frame.objectName = 'EditColorFrame'
     self.frame.setLayout(qt.QHBoxLayout())
     self.parent.layout().addWidget(self.frame)
@@ -56,10 +57,12 @@ class EditColor(VTKObservationMixin):
     self.label = qt.QLabel(self.frame)
     self.label.setText("Current label: ")
     self.frame.layout().addWidget(self.label)
+    self.label.hide()
 
     self.labelName = qt.QLabel(self.frame)
     self.labelName.setText("")
     self.frame.layout().addWidget(self.labelName)
+    self.labelName.hide()
 
     self.colorSpin = qt.QSpinBox(self.frame)
     self.colorSpin.objectName = 'ColorSpinBox'

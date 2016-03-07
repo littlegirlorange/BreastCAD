@@ -265,7 +265,7 @@ class EditBox(VTKObservationMixin):
 
     # create all of the buttons
     # createButtonRow() ensures that only effects in self.effects are exposed,
-    self.createButtonRow( ("DefaultTool", "EraseLabel", "PaintEffect", "DrawEffect", "WandEffect", "LevelTracingEffect", "RectangleEffect", "PreviousCheckPoint", "NextCheckPoint") )
+    self.createButtonRow( ("DefaultTool", "DrawEffect", "PaintEffect", "RectangleEffect", "EraseLabel", "PreviousCheckPoint", "NextCheckPoint") )
     #self.createButtonRow( ("DefaultTool", "EraseLabel", "PaintEffect", "DrawEffect", "WandEffect", "LevelTracingEffect", "RectangleEffect", "IdentifyIslandsEffect", "ChangeIslandEffect", "RemoveIslandsEffect", "SaveIslandEffect") )
     #self.createButtonRow( ("ErodeEffect", "DilateEffect", "GrowCutEffect", "WatershedFromMarkerEffect", "ThresholdEffect", "ChangeLabelEffect", "MakeModelEffect", "FastMarchingEffect") )
 
@@ -299,6 +299,7 @@ class EditBox(VTKObservationMixin):
   def setActiveToolLabel(self,name):
     if EditBox.displayNames.has_key(name):
       name = EditBox.displayNames[name]
+    self.optionsFrame.setTitle(name + " options")
     #self.toolsActiveToolName.setText(name)
 
   #

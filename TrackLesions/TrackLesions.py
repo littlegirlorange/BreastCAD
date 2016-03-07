@@ -243,26 +243,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.openPatientButton = qt.QPushButton("Select Patient Folder")
     patientFormLayout.addRow(self.openPatientButton)
     
-    """
-    # Patient info
-    self.patientLayoutBox = qt.QGroupBox("Patient info")
-    self.patientLayoutBox.setLayout(qt.QFormLayout())    
-    self.patientIdLabel = qt.QLabel()
-    self.patientIdLabel.setText("<Select patient>")
-    #self.patientIdLabel.setAlignment(qt.Qt.AlignLeft | qt.Qt.AlignVCenter)
-    self.patientLayoutBox.layout().addRow("Patient ID:", self.patientIdLabel)
-    self.currentLabel = qt.QLabel()
-    self.currentLabel.setText("")
-    self.patientLayoutBox.layout().addRow("Current accession (date):", self.currentLabel)
-    self.past1Label = qt.QLabel()
-    self.past1Label.setText("")
-    self.patientLayoutBox.layout().addRow("Past1 accession (date):", self.past1Label)
-    self.past2Label = qt.QLabel()
-    self.past2Label.setText("")
-    self.patientLayoutBox.layout().addRow("Past2 accession (date):", self.past2Label)
-    patientFormLayout.addRow(self.patientLayoutBox)
-    """
-    
     # Patient info
     self.patientLayoutBox = qt.QGroupBox("Patient info")
     self.patientLayoutBox.setLayout(qt.QFormLayout())    
@@ -273,18 +253,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.patientInfoView = qt.QTreeView()
     self.patientInfoView.sortingEnabled = False
     self.patientLayoutBox.layout().addRow(self.patientInfoView)
-    self.setPatientInfo(reset=True)
-#     self.patientInfoModel = qt.QStandardItemModel()
-#     for iRow, timePoint in enumerate(self.timePoints):
-#       item = qt.QStandardItem()
-#       item.setText(timePoint)
-#       self.patientInfoModel.setItem(iRow, 0, item)
-#     self.patientInfoModel.setHeaderData(0, 1, "Study")
-#     self.patientInfoModel.setHeaderData(1, 1, "Accession No.")
-#     self.patientInfoModel.setHeaderData(2, 1, "Date")      
-#     self.patientInfoView.setModel(self.patientInfoModel)
-#     for i in range(3):
-#       self.patientInfoView.resizeColumnToContents(i)   
+    self.setPatientInfo(reset=True)  
     patientFormLayout.addRow(self.patientLayoutBox)
     
     #
@@ -476,10 +445,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   def resetParameterNode(self):
     # Reset current patient.
     self.setPatientInfo(reset=True)
-#     self.patientIdLabel.setText("<Select patient>")
-#     self.currentLabel.setText("")
-#     self.past1Label.setText("")
-#     self.past2Label.setText("")
 
     # Set view to current.
     self.compareViewRadioButton.checked = True
@@ -667,9 +632,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.setSliceSelector(minVal=1, maxVal=maxSliceNo, value=curSliceNo)
     
     # Enable lesion contouring.
-    EditUtil.setActiveVolumes(self.studies[0].diffNodes[0], self.studies[0].labelNode)
     EditUtil.setLabel(1)
-    self.editor.setMergeNode(self.studies[0].labelNode)
 
 
   def setSliceSelector(self, minVal=None, maxVal=None, value=None):
@@ -734,15 +697,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
                                "Incomplete patient folder. \nPlease try reloading data.")
         # TODO: Disable processing buttons
         return
-      
-      # Set current patient in parameter node.
-#       self.patientIdLabel.setText(self.studies[0].patientId)
-#       self.currentLabel.setText(self.studies[0].accessionNo +
-#                                 " ("+self.studies[0].studyDate + ")")
-#       self.past1Label.setText(self.studies[1].accessionNo +
-#                               " (" + self.studies[1].studyDate + ")")
-#       self.past2Label.setText(self.studies[2].accessionNo +
-#                               " (" + self.studies[2].studyDate + ")")
 
     self.setPatientInfo()
       
@@ -779,16 +733,13 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.setSliceSelector(minVal=1, maxVal=maxSliceNo, value=curSliceNo)
     
     # Enable lesion contouring.
-    EditUtil.setActiveVolumes(self.studies[0].diffNodes[0], self.studies[0].labelNode)
-    EditUtil.setLabel(1)
-    self.editor.setMergeNode(self.studies[0].labelNode)    
+    EditUtil.setLabel(1)   
     
         
   #
   # Contouring methods
   #
   def editLabelNode(self, labelNode, volumeNode):
-    EditUtil.setActiveVolumes(volumeNode, labelNode)
     EditUtil.setLabel(1)
     EditUtil.setCurrentEffect("DrawEffect")    
     

@@ -257,30 +257,42 @@ class ThresholdEffectTool(Effect.EffectTool):
 
   def apply(self):
 
-    if not self.editUtil.getBackgroundImage() or not self.editUtil.getLabelImage():
+    sliceLogic = self.sliceWidget.sliceLogic()
+    labelNode = sliceLogic.GetLabelLayer().GetVolumeNode()
+    labelImage = labelNode.GetImageData()
+    backgroundNode = sliceLogic.GetBackgroundLayer().GetVolumeNode()
+    backgroundImage = backgroundNode.GetImageData()
+    
+    if not backgroundImage or not labelImage:
       return
-    node = self.editUtil.getParameterNode()
-
-    self.undoRedo.saveState()
+    
+    self.undoRedo.saveState(labelNode)
 
     thresh = vtk.vtkImageThreshold()
     if vtk.VTK_MAJOR_VERSION <= 5:
-      thresh.SetInput( self.editUtil.getBackgroundImage() )
+      thresh.SetInput(backgroundImage)
     else:
-      thresh.SetInputData( self.editUtil.getBackgroundImage() )
+      thresh.SetInputData(backgroundImage)
     thresh.ThresholdBetween(self.min, self.max)
     thresh.SetInValue( self.editUtil.getLabel() )
     thresh.SetOutValue( 0 )
-    thresh.SetOutputScalarType( self.editUtil.getLabelImage().GetScalarType() )
+    thresh.SetOutputScalarType(labelImage.GetScalarType())
     # $this setProgressFilter $thresh "Threshold"
     thresh.Update()
 
-    self.editUtil.getLabelImage().DeepCopy( thresh.GetOutput() )
-    self.editUtil.markVolumeNodeAsModified(self.editUtil.getLabelVolume())
+    labelImage.DeepCopy( thresh.GetOutput() )
+    self.editUtil.markVolumeNodeAsModified(labelNode)
 
   def preview(self,color=None):
 
-    if not self.editUtil.getBackgroundImage() or not self.editUtil.getLabelImage():
+    sliceLogic = self.sliceWidget.sliceLogic()
+    labelNode = sliceLogic.GetLabelLayer().GetVolumeNode()
+    labelImage = labelNode.GetImageData()
+    backgroundLogic = sliceLogic.GetBackgroundLayer()    
+    backgroundNode = backgroundLogic.GetVolumeNode()
+    backgroundImage = backgroundNode.GetImageData()
+    
+    if not backgroundImage or not labelImage:
       return
 
     #
@@ -310,8 +322,6 @@ class ThresholdEffectTool(Effect.EffectTool):
 
     if not self.thresh:
       self.thresh = vtk.vtkImageThreshold()
-    sliceLogic = self.sliceWidget.sliceLogic()
-    backgroundLogic = sliceLogic.GetBackgroundLayer()
     if vtk.VTK_MAJOR_VERSION <= 5:
       self.thresh.SetInput( backgroundLogic.GetReslice().GetOutput() )
     else:

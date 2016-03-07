@@ -309,7 +309,7 @@ class WandEffectLogic(LabelEffect.LabelEffectLogic):
     #
     # do a recursive search for pixels to change
     #
-    self.undoRedo.saveState()
+    self.undoRedo.saveState(labelNode)
     value = backgroundDrawArray[ijk]
     label = self.editUtil.getLabel()
     if paintThreshold:

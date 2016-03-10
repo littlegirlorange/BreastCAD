@@ -123,33 +123,26 @@ class LabelSummaryWidget(qt.QWidget):
     #self.structuresView.minimumHeight = 200
     layout.addWidget(self.structuresView)
 
-    # all buttons frame
-
-    self.allButtonsFrame = qt.QFrame()
-    self.allButtonsFrame.objectName = 'AllButtonsFrameButton'
-    self.allButtonsFrame.setLayout(qt.QHBoxLayout())
-    layout.addWidget(self.allButtonsFrame)
-
     # delete all structures button
 
     self.deleteStructuresButton = qt.QPushButton("Delete All")
     self.deleteStructuresButton.objectName = 'DeleteStructureButton'
     self.deleteStructuresButton.setToolTip( "Delete all the structure volumes from the scene.\n\nNote: to delete individual structure volumes, use the Data Module." )
-    self.allButtonsFrame.layout().addWidget(self.deleteStructuresButton)
+    #self.allButtonsFrame.layout().addWidget(self.deleteStructuresButton)
 
     # delete selected structures button
 
     self.deleteSelectedStructureButton = qt.QPushButton("Delete Selected")
     self.deleteSelectedStructureButton.objectName = 'DeleteSelectedStructureButton'
     self.deleteSelectedStructureButton.setToolTip( "Delete the selected structure volume from the scene." )
-    self.allButtonsFrame.layout().addWidget(self.deleteSelectedStructureButton)
+    #self.allButtonsFrame.layout().addWidget(self.deleteSelectedStructureButton)
 
     # options frame
 
     self.optionsFrame = qt.QFrame()
     self.optionsFrame.objectName = 'OptionsFrame'
     self.optionsFrame.setLayout(qt.QHBoxLayout())
-    layout.addWidget(self.optionsFrame)
+    #layout.addWidget(self.optionsFrame)
 
   #---------------------------------------------------------------------------
 #   def promptStructure(self):

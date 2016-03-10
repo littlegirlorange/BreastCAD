@@ -278,11 +278,7 @@ class EditUtil(object):
       sliceNode.SetUseLabelOutline(state)
   
   @staticmethod
-  def setLabelVisible(state):
-    if state:
-      opacity = 1.0
-    else:
-      opacity = 0.0
+  def setLabelOpacity(opacity):
     """Set the label visibility for all composite nodes in the scene to state"""
     for compositeNode in slicer.util.getNodes('vtkMRMLSliceCompositeNode*').values():
       compositeNode.SetLabelOpacity(opacity)

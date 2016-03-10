@@ -6,6 +6,7 @@ from fnmatch import fnmatch
 from slicer.ScriptedLoadableModule import *
 import logging
 import MyEditor
+import MyEditorLib
 from MyEditorLib.EditUtil import EditUtil
 import TrackLesionsParams_LongitudinalStudy as params
 import LabelStatsLogic
@@ -198,26 +199,21 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   """Uses ScriptedLoadableModuleWidget base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
-
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
-    
-    layout = self.layout
 
-    # Instantiate and connect widgets ...
-    # Set custom 2 sag view layout.
-    
     self.timePoints = ["Current", "Past1", "Past2"]
-    self.sliceWidgets = ["Sub1", "Sub2", "Sub3", "Sub4"]
-    self.viewLogicNames = ["ViewCurrent_VR", "ViewPast1_VR", "ViewPast2_VR"]
-    self.currentLabelNode = None
-    self.past1LabelNode = None
-    self.past2LabelNode = None
-    self.currentDiffNodes = None
-    self.past1DiffNodes = None
-    self.past2DiffNodes = None    
+    self.sliceWidgetNames = ["Sub1", "Sub2", "Sub3", "Sub4"]
+    self.viewLogicNames = ["ViewCurrent_VR", "ViewPast1_VR", "ViewPast2_VR"]  
+    self.styleObserverTags = []
+    self.sliceWidgetsPerStyle = {}   
     self.studies = []
-
+    self.currentDirectory = ""
+    self.logic = TrackLesionsLogic()  
+    
+    # Instantiate and connect widgets ...
+    
+    # Set custom layouts.
     layoutManager = slicer.app.layoutManager()
     layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
     layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(currentFourUpViewId, currentFourUpView)
@@ -230,14 +226,25 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.currentView = 'CompareView'
 
     self.resetUI()
+    
+    mainCollapsibleButton = ctk.ctkCollapsibleButton()
+    mainCollapsibleButton.text = "TrackLesions"
+    self.layout.addWidget(mainCollapsibleButton)
+    mainLayout = qt.QFormLayout(mainCollapsibleButton)
+    self.tabWidget = qt.QTabWidget()
+    mainLayout.addWidget(self.tabWidget)
            
     #
     # Patient area
     #
-    patientCollapsibleButton = ctk.ctkCollapsibleButton()
-    patientCollapsibleButton.text = "Patient"
-    self.layout.addWidget(patientCollapsibleButton)
-    patientFormLayout = qt.QFormLayout(patientCollapsibleButton)
+#     patientCollapsibleButton = ctk.ctkCollapsibleButton()
+#     patientCollapsibleButton.text = "Patient"
+#     self.layout.addWidget(patientCollapsibleButton)
+#     patientFormLayout = qt.QFormLayout(patientCollapsibleButton)
+    self.patientFormWidget = qt.QWidget()
+    patientFormLayout = qt.QFormLayout()
+    self.patientFormWidget.setLayout(patientFormLayout)
+    self.tabWidget.addTab(self.patientFormWidget, "Patient")
     
     # Patient selector
     self.openPatientButton = qt.QPushButton("Select Patient Folder")
@@ -259,10 +266,15 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     #
     # View area
     #
-    viewCollapsibleButton = ctk.ctkCollapsibleButton()
-    viewCollapsibleButton.text = "View"
-    self.layout.addWidget(viewCollapsibleButton)
-    viewFormLayout = qt.QFormLayout(viewCollapsibleButton)
+#     viewCollapsibleButton = ctk.ctkCollapsibleButton()
+#     viewCollapsibleButton.text = "View"
+#     self.layout.addWidget(viewCollapsibleButton)
+#     viewFormLayout = qt.QFormLayout(viewCollapsibleButton)
+    self.viewFormWidget = qt.QWidget()
+    viewFormLayout = qt.QFormLayout()
+    self.viewFormWidget.setLayout(viewFormLayout)
+    self.viewFormWidget.setEnabled(False)
+    self.tabWidget.addTab(self.viewFormWidget, "View")
     
     # View group box
     self.viewRadioBox = qt.QGroupBox("View")
@@ -308,25 +320,35 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     #
     # Contour area
     #
-    contourCollapsibleButton = ctk.ctkCollapsibleButton()
-    contourCollapsibleButton.text = "Contour"
-    self.layout.addWidget(contourCollapsibleButton)
-    contourFormLayout = qt.QFormLayout(contourCollapsibleButton)
+#     contourCollapsibleButton = ctk.ctkCollapsibleButton()
+#     contourCollapsibleButton.text = "Contour"
+#     self.layout.addWidget(contourCollapsibleButton)
+#     contourFormLayout = qt.QFormLayout(contourCollapsibleButton)
+    self.contourFormWidget = qt.QWidget()
+    contourFormLayout = qt.QVBoxLayout()
+    self.contourFormWidget.setLayout(contourFormLayout)
+    self.contourFormWidget.setEnabled(False)
+    self.tabWidget.addTab(self.contourFormWidget, "Contour")
     
     # Edit tools
-    self.editBoxFrame = qt.QGroupBox("Contouring tools")
+    self.editBoxFrame = qt.QFrame()
     self.editBoxFrame.objectName = 'EditBoxFrame'
     self.editBoxFrame.setLayout(qt.QVBoxLayout())
-    contourFormLayout.addRow(self.editBoxFrame)
-    self.editor = MyEditor.EditorWidget(self.editBoxFrame, False)
+    self.editor = MyEditor.EditorWidget(self.contourFormWidget, False)
+    
+    # Save contours button
+    self.saveContoursButton = qt.QPushButton("Save contours")
+    self.saveContoursButton.toolTip = "Save contours as .mha label maps."
+    self.saveContoursButton.enabled = True
+    contourFormLayout.addWidget(self.saveContoursButton)
      
     #
-    # Analysis Area
+    # Analysis Area - Disabled for longitudinal study.
     #
     analysisCollapsibleButton = ctk.ctkCollapsibleButton()
     analysisCollapsibleButton.text = "Analysis"
     analysisCollapsibleButton.collapsed = True
-    self.layout.addWidget(analysisCollapsibleButton)
+    #self.layout.addWidget(analysisCollapsibleButton)
 
     # Layout within the dummy collapsible button
     analysisFormLayout = qt.QFormLayout(analysisCollapsibleButton)
@@ -381,8 +403,8 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     
     # Add vertical spacer
     self.layout.addStretch(1)
-    
-    # connections
+  
+    # Connections
     self.openPatientButton.connect("clicked()", self.onOpenPatientButton)
     self.inputSliceSelector.connect("valueChanged(int)", self.onInputSliceSelect)
     self.compareViewRadioButton.connect('clicked()', self.onViewSelected)
@@ -390,14 +412,13 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.past1ViewRadioButton.connect('clicked()', self.onViewSelected)
     self.past2ViewRadioButton.connect('clicked()', self.onViewSelected) 
     self.resetWindowingButton.connect('clicked()', self.onResetWindowing)  
-    self.resetViewsButton.connect('clicked()', self.onResetViews)      
+    self.resetViewsButton.connect('clicked()', self.onResetViews) 
+    self.saveContoursButton.connect('clicked()', self.onSaveContours)     
     self.findIslandsButton.connect('clicked(bool)', self.onConvertMapToLabelButton)
     self.saveIslandsButton.connect('toggled(bool)', self.onSaveIslandsButtonToggled)
     self.queryIslandsButton.connect('toggled(bool)', self.onQueryIslandsButtonToggled)    
     self.Button.connect('clicked(bool)', self.onButton)
       
-    self.styleObserverTags = []
-    self.sliceWidgetsPerStyle = {}    
 
   def removeObservers(self):
     # Remove observers and reset
@@ -450,6 +471,11 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.compareViewRadioButton.checked = True
     self.setSliceSelector(minVal=1, maxVal=1, value=1)    
     
+    # Set patient tab to current and disable view and contour.
+    self.tabWidget.setCurrentWidget(self.patientFormWidget)
+    self.viewFormWidget.setEnabled(False)
+    self.contourFormWidget.setEnabled(False)
+    
     # Reset editor.
     self.editor.resetInterface()
     
@@ -496,7 +522,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       self.setView(newView)
       
   def setView(self, newView):
-    logic = TrackLesionsLogic()
     layoutManager = slicer.app.layoutManager()
     if newView == 'CompareView':
       layoutManager.setLayout(customLayoutId)
@@ -507,7 +532,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     else:
       layoutManager.setLayout(past2FourUpViewId)
     self.currentView = newView
-    #self.setLayoutNodes()
     
 
   def updateSliceWidget(self, widget, layer, nodeID, fitToBackground=False):
@@ -565,34 +589,46 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     if len(self.studies) > 0:
       qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Close patient", 
                                         "Close the current patient? \nUnsaved changes will be lost.", 
-                                        qt.QMessageBox.Ok, qt.QMessageBox.Cancel)
+                                        qt.QMessageBox.Save | qt.QMessageBox.Discard | qt.QMessageBox.Cancel,
+                                        qt.QMessageBox.Cancel)
       if qResult == qt.QMessageBox.Cancel:
         return
-      else:
-        slicer.mrmlScene.Clear(0)
-        self.resetUI()
-        self.resetParameterNode(
-                                )
+      elif qResults == qt.QMessageBox.Save:
+        errorList = []
+        for study in self.studies:
+          if study.labelNode:
+            bOk = self.saveVTKAsMHA(study.labelNode, self.currentDirectory)
+            if not bOk:
+              errorList.append(study.labelNode.GetName())
+          else:
+            errorList.append(study.labelNode.GetName())
+        if len(errorList) > 0:
+          qResult = qt.QMessageBox.error(slicer.util.mainWindow(), "Close patient",
+                                         "Error saving {0}.".format("\n".join(errorList)),
+                                         qt.QMessageBox.Ok, qt.QMessageBox.Ok)
+              
+      slicer.mrmlScene.Clear(0)
+      self.resetUI()
+      self.resetParameterNode()
+      self.resetSelf()
+       
     # Pop up open data dialog.
-    slicer.util.openAddDataDialog()
+    if not slicer.util.openAddDataDialog():
+      return
     
     # Sort input data into separate studies.
-    self.logic = TrackLesionsLogic()
     self.studies = self.logic.sortVolumeNodes()
     if len(self.studies) == 0:
       qt.QMessageBox.warning(slicer.util.mainWindow(), "Load patient",
                              "Incomplete patient folder. \nUnable to process.")
       # TODO: Disable processing buttons
       return
+
+    # Set current directory for saving label volumes.
+    diffNodeFilename = self.studies[0].diffNodes[0].GetStorageNode().GetFileName()
+    self.currentDirectory = os.path.dirname(diffNodeFilename)
     
-    # Set current patient in parameter node.
-#     self.patientIdLabel.setText(self.studies[0].patientId)
-#     self.currentLabel.setText(self.studies[0].accessionNo +
-#                               " ("+self.studies[0].studyDate + ")")
-#     self.past1Label.setText(self.studies[1].accessionNo +
-#                             " (" + self.studies[1].studyDate + ")")
-#     self.past2Label.setText(self.studies[2].accessionNo +
-#                             " (" + self.studies[2].studyDate + ")")
+    # Display patient info in main GUI panet.
     self.setPatientInfo()
     
     for iStudy, study in enumerate(self.studies):
@@ -624,6 +660,10 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
     
     self.resetUI()
+    
+    # Enable view and contour features.
+    self.viewFormWidget.setEnabled(True)
+    self.contourFormWidget.setEnabled(True)
       
     # Set slice selector.
     dims = self.studies[0].diffNodes[0].GetImageData().GetDimensions()
@@ -658,12 +698,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     for study in self.studies:
       for volumeNode in study.diffNodes:
         self.setWindowing(volumeNode, 0)
-#           imageData = vtk.vtkImageData()
-#           imageData = volumeNode.GetImageData()      
-#           scalarRange = imageData.GetScalarRange()
-#           displayNode = volumeNode.GetDisplayNode()
-#           displayNode.SetAutoWindowLevel(0)
-#           displayNode.SetWindowLevelMinMax(0, scalarRange[1])
+
         
   def setWindowing(self, volumeNode, winMin=None, winMax=None):  
     imageData = vtk.vtkImageData()
@@ -690,7 +725,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     # Attach volume and label nodes to each compound view node.
     if len(self.studies) == 0:
       # Sort nodes into separate studies.
-      self.logic = TrackLesionsLogic()
       self.studies = self.logic.sortVolumeNodes()
       if len(self.studies) == 0:
         qt.QMessageBox.warning(slicer.util.mainWindow(), "Reset views",
@@ -739,9 +773,29 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   #
   # Contouring methods
   #
+  def onSaveContours(self):
+    errorList = []
+    for study in self.studies:
+      if study.labelNode:
+        bOk = self.logic.saveVTKAsMHA(study.labelNode, self.currentDirectory)
+        if not bOk:
+          errorList.append(study.labelNode.GetName())
+      else:
+        errorList.append(study.labelNode.GetName())
+    if len(errorList) > 0:
+      qResult = qt.QMessageBox.error(slicer.util.mainWindow(), "Save contours",
+                                     "Error saving {0}.".format("\n".join(errorList)),
+                                     qt.QMessageBox.Ok, qt.QMessageBox.Ok)
+    else:
+      qResult = qt.QMessageBox.information(slicer.util.mainWindow(), "Save contours",
+                                           "Label maps saved to {0}".format(self.currentDirectory),
+                                           qt.QMessageBox.Ok, qt.QMessageBox.Ok)
+              
+    
   def editLabelNode(self, labelNode, volumeNode):
     EditUtil.setLabel(1)
-    EditUtil.setCurrentEffect("DrawEffect")    
+    EditUtil.setCurrentEffect("DrawEffect")
+        
     
   def onSelect(self):
     pass
@@ -750,7 +804,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   def attachStudyToSliceWidgets(self, study, timePoint):
     if timePoint in self.timePoints:
       for iDiffNode in range(len(study.diffNodes)):
-        widget = timePoint + "_" + self.sliceWidgets[iDiffNode]
+        widget = timePoint + "_" + self.sliceWidgetNames[iDiffNode]
         self.updateSliceWidget(widget, "Background", study.diffNodes[iDiffNode].GetID(), True)
         self.updateSliceWidget(widget, "Foreground", None)
         if study.labelNode:
@@ -829,13 +883,12 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       sliceLogic = sliceWidget.sliceLogic()
       interactor = caller.GetInteractor()
       xy = interactor.GetEventPosition()
-      logic = TrackLesionsLogic()
       if self.saveIslandsButton.isChecked():
-        outputNode = logic.saveIsland(xy, sliceLogic)
+        outputNode = self.logic.saveIsland(xy, sliceLogic)
         if outputNode:
           self.updateSliceWidget(sliceLogic.GetName(), "Label", outputNode.GetID())
       elif self.queryIslandsButton.isChecked():
-        statsLogic = logic.queryIsland(xy, sliceLogic)
+        statsLogic = self.logic.queryIsland(xy, sliceLogic)
         if statsLogic:
           labelNode = sliceLogic.GetLabelLayer().GetVolumeNode()
           self.populateStats(statsLogic, labelNode)
@@ -1349,7 +1402,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     newName = labelName + "_islands"
     outputNode = slicer.util.getNode(newName)
     if not outputNode:            
-      outputNode = self.createOutputLabelNode(newName, 'GenericColors')    
+      outputNode = self.createOutputLabelNode(newName)
     self.connectImageDataToOutputNode(labelNode, outputNode, outputImageData)
     
     castOut.SetOutput( None )
@@ -1362,8 +1415,9 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     outputNode = slicer.vtkMRMLLabelMapVolumeNode()
     outputNode.SetName(name)
     slicer.mrmlScene.AddNode(outputNode)
-    self.initializeOutputLabelNodeDisplayAndStorage(outputNode, colorTable)
+    self.initializeOutputLabelNodeDisplayAndStorage(outputNode, colorTable)    
     return outputNode
+  
   
   def initializeOutputLabelNodeDisplayAndStorage(self, outputNode, colorTable='GenericColors'):
     # Set colour table and add to display.
@@ -1393,7 +1447,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     slicer.mrmlScene.AddNode(displayNode)
     displayNode.SetAndObserveColorNodeID(colorNode.GetID())
     outputNode.SetAndObserveDisplayNodeID(displayNode.GetID())
-    outputNode.CreateDefaultStorageNode()
+    outputNode.CreateDefaultStorageNode() 
     return outputNode  
 
   def connectImageDataToOutputNode(self, inputNode, outputNode, outputImageData):
@@ -1545,6 +1599,11 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
         camera.SetViewUp(0, 0, 1)
     cameraNodes.UnRegister(slicer.mrmlScene)
 
+
+  def saveVTKAsMHA(self, volumeNode, directory):
+    filename = directory + os.sep + volumeNode.GetName() + ".mha"
+    return slicer.util.saveNode(volumeNode, filename)
+    
 
 class TrackLesionsTest(ScriptedLoadableModuleTest):
   """

@@ -8,6 +8,7 @@ from EditBox import *
 from EditColor import *
 from EditOptions import *
 from HelperBox import *
+from LabelSummaryWidget import *
 from LabelEffect import LabelEffectOptions, LabelEffectTool, LabelEffectLogic
 
 # Built-in effects

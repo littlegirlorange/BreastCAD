@@ -48,21 +48,19 @@ class EditColor(VTKObservationMixin):
     self.removeObservers()
 
   def create(self):
-    #self.frame = qt.QFrame(self.parent)
-    self.frame = qt.QGroupBox("Current label", self.parent)
+    self.frame = qt.QFrame(self.parent)
+    #self.frame = qt.QGroupBox("Active label", self.parent)
     self.frame.objectName = 'EditColorFrame'
     self.frame.setLayout(qt.QHBoxLayout())
     self.parent.layout().addWidget(self.frame)
 
     self.label = qt.QLabel(self.frame)
-    self.label.setText("Current label: ")
+    self.label.setText("Active label:")
     self.frame.layout().addWidget(self.label)
-    self.label.hide()
 
-    self.labelName = qt.QLabel(self.frame)
-    self.labelName.setText("")
-    self.frame.layout().addWidget(self.labelName)
-    self.labelName.hide()
+    #self.labelName = qt.QLabel(self.frame)
+    #self.labelName.setText("")
+    #self.frame.layout().addWidget(self.labelName)
 
     self.colorSpin = qt.QSpinBox(self.frame)
     self.colorSpin.objectName = 'ColorSpinBox'
@@ -122,7 +120,7 @@ class EditColor(VTKObservationMixin):
       self.colorNode = slicer.util.getNode('GenericColors')
     if self.colorNode:
       self.frame.setDisabled(0)
-      self.labelName.setText( self.colorNode.GetColorName( label ) )
+      #self.labelName.setText( self.colorNode.GetColorName( label ) )
       lut = self.colorNode.GetLookupTable()
       rgb = lut.GetTableValue( label )
       self.colorPatch.setStyleSheet(

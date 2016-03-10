@@ -272,50 +272,54 @@ class EditorWidget(VTKObservationMixin):
     # (we already have self.parent for the parent widget, and self.layout for the layout)
     # create the frames for the EditColor, toolsOptionsFrame and EditBox
 
-    # create collapsible button for entire "edit label maps" section
-#     self.editLabelMapsFrame = ctk.ctkCollapsibleButton(self.parent)
-#     self.editLabelMapsFrame.objectName = 'EditLabelMapsFrame'
-#     self.editLabelMapsFrame.setLayout(qt.QVBoxLayout())
-#     self.editLabelMapsFrame.setText("Edit Selected Label Map")
-#     self.layout.addWidget(self.editLabelMapsFrame)
-#     self.editLabelMapsFrame.collapsed = True
-
-    # create and add EditColor directly to "edit label map" section
+    #
+    # Label section
+    #
+    # Label color selector 
     colorNode = slicer.util.getNode('GenericColors')
-    self.toolsColor = MyEditorLib.EditColor(self.parent, colorNode=colorNode)
-
-    # create frame holding both the effect options and edit box:
-#     self.effectsToolsFrame = qt.QFrame(self.parent)
-#     self.effectsToolsFrame.objectName = 'EffectsToolsFrame'
-#     self.effectsToolsFrame.setLayout(qt.QHBoxLayout())
-#     #self.editLabelMapsFrame.layout().addStretch(1)
-#     self.parent.layout().addWidget(self.effectsToolsFrame)
+    labelOptionsFrame = qt.QGroupBox("Labels", self.parent)
+    labelOptionsFrame.setLayout(qt.QVBoxLayout())
+    self.toolsColor = MyEditorLib.EditColor(labelOptionsFrame, colorNode=colorNode)
+    self.parent.layout().addWidget(labelOptionsFrame)
+    
+    # Label opacity slicer
+    defaultOpacity = 0.5
+    opacityFrame = qt.QFrame(labelOptionsFrame)
+    opacityFrame.setLayout(qt.QHBoxLayout())
+    labelOptionsFrame.layout().addWidget(opacityFrame)
+    label = qt.QLabel("Opacity: ", opacityFrame)
+    opacityFrame.layout().addWidget(label)
+    self.opacityValue = qt.QLabel(str(defaultOpacity), opacityFrame)
+    opacityFrame.layout().addWidget(self.opacityValue)
+    self.opacitySlider = ctk.ctkDoubleSlider()
+    self.opacitySlider.minimum = 0.0
+    self.opacitySlider.maximum = 1.0
+    self.opacitySlider.orientation = 1
+    self.opacitySlider.singleStep = 0.05
+    self.opacitySlider.setValue(defaultOpacity)
+    self.opacitySlider.connect('valueChanged(double)', self.onOpacityChanged)
+    opacityFrame.layout().addWidget(self.opacitySlider)
+    
+    # Label outline button
+    self.labelOutlineCheckBox = qt.QCheckBox(opacityFrame)
+    self.labelOutlineCheckBox.setText("Outlines")
+    self.labelOutlineCheckBox.checked = False
+    self.labelOutlineCheckBox.setToolTip("Show label regions as outlines.")
+    self.labelOutlineCheckBox.connect('stateChanged(int)', self.onLabelOutlineChecked)
+    opacityFrame.layout().addWidget(self.labelOutlineCheckBox)
 
     # create frame for effect options
     self.createEffectOptionsFrame()
 
     # create and add frame for EditBox
     self.createEditBox()
-    
-    # Create and add widget for listing labels.
-    self.createLabelSummaryWidget()
 
     # put the tool options below the color selector
     self.parent.layout().addWidget(self.editBoxFrame)
     self.parent.layout().addWidget(self.effectOptionsFrame)
-    
-    self.labelOptionsFrame = qt.QGroupBox("Label display options")
-    self.labelOptionsFrame.setLayout(qt.QVBoxLayout())
-    self.toggleLabelsButton = qt.QPushButton("Hide Labels")
-    self.toggleLabelsButton.setCheckable(True)
-    self.labelOptionsFrame.layout().addWidget(self.toggleLabelsButton)
-    self.toggleLabelsButton.connect('toggled(bool)', self.onToggleLabels)
-    self.toggleOutlinesButton = qt.QPushButton("Show Outline")
-    self.toggleOutlinesButton.setCheckable(True)
-    self.labelOptionsFrame.layout().addWidget(self.toggleOutlinesButton)
-    self.toggleOutlinesButton.connect('toggled(bool)', self.onToggleOutlines)
-    self.parent.layout().addWidget(self.labelOptionsFrame)
 
+    # Create and add widget for listing labels.
+    self.createLabelSummaryWidget()
     self.parent.layout().addWidget(self.labelSummaryWidget)
     
     if self.helper:
@@ -330,10 +334,7 @@ class EditorWidget(VTKObservationMixin):
   # creates the frame for the effect options
   # assumes self.effectsToolsFrame and its layout has already been created
   def createEffectOptionsFrame(self):
-#     if not self.effectsToolsFrame:
-#       return
-    #self.effectOptionsFrame = qt.QFrame(self.parent)
-    self.effectOptionsFrame = qt.QGroupBox("Tool options", self.parent)
+    self.effectOptionsFrame = qt.QGroupBox("Tools", self.parent)
     self.effectOptionsFrame.objectName = 'EffectOptionsFrame'
     self.effectOptionsFrame.setLayout(qt.QVBoxLayout())
 
@@ -350,8 +351,7 @@ class EditorWidget(VTKObservationMixin):
 
   # Creates the label summary widget.
   def createLabelSummaryWidget(self):
-    self.labelSummaryFrame = qt.QFrame(self.parent)
-    #self.labelSummaryFrame = qt.QGroupBox("Current contours and so much more I", self.parent)
+    self.labelSummaryFrame = qt.QGroupBox("Current contours")
     self.labelSummaryFrame.objectName = "LabelSummaryFrame"
     self.labelSummaryFrame.setLayout(qt.QVBoxLayout())
     self.labelSummaryWidget = LabelSummaryWidget(self.labelSummaryFrame)
@@ -359,12 +359,13 @@ class EditorWidget(VTKObservationMixin):
   def updateLabelFrame(self, mergeVolume):
     pass
     #self.editLabelMapsFrame.collapsed = not mergeVolume
-    
-  def onToggleLabels(self, checked):
-    EditUtil.setLabelVisible(not checked)
       
-  def onToggleOutlines(self, checked):
-    EditUtil.setLabelOutline(checked)
+  def onLabelOutlineChecked(self):
+    EditUtil.setLabelOutline(self.labelOutlineCheckBox.isChecked())
+    
+  def onOpacityChanged(self, opacity):
+    self.opacityValue.text = "{0:.1f}".format(opacity)
+    EditUtil.setLabelOpacity(opacity)
   
 
   #->> TODO: check to make sure editor module smoothly handles interactive changes to the master and merge nodes

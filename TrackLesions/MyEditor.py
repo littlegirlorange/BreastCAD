@@ -240,6 +240,11 @@ class EditorWidget(VTKObservationMixin):
         self.helper.setMergeVolume(newMergeNode)
       if self.labelSummaryWidget:
         self.labelSummaryWidget.setMerge(newMergeNode)
+        
+  # sets the label map nodes
+  def setLabelNodes(self, labelNodes):
+    if self.labelSummaryWidget:
+      self.labelSummaryWidget.addLabelNodes(labelNodes)
 
   # sets up the widget
   def setup(self):
@@ -284,6 +289,7 @@ class EditorWidget(VTKObservationMixin):
     
     # Label opacity slicer
     defaultOpacity = 0.5
+    EditUtil.setLabelOpacity(defaultOpacity)
     opacityFrame = qt.QFrame(labelOptionsFrame)
     opacityFrame.setLayout(qt.QHBoxLayout())
     labelOptionsFrame.layout().addWidget(opacityFrame)

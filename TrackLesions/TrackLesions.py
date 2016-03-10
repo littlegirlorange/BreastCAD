@@ -405,7 +405,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.layout.addStretch(1)
   
     # Connections
-    self.openPatientButton.connect("clicked()", self.onOpenPatientButton)
+    self.openPatientButton.connect("clicked()", self.onOpenPatient)
     self.inputSliceSelector.connect("valueChanged(int)", self.onInputSliceSelect)
     self.compareViewRadioButton.connect('clicked()', self.onViewSelected)
     self.currentViewRadioButton.connect('clicked()', self.onViewSelected)
@@ -584,7 +584,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       sliceCompositeNode.SetLinkedControl(1)
       
 
-  def onOpenPatientButton(self):
+  def onOpenPatient(self):
     # Prompt to close current scene if data is currently loaded.
     if len(self.studies) > 0:
       qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Close patient", 
@@ -631,6 +631,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     # Display patient info in main GUI panet.
     self.setPatientInfo()
     
+    labelNodes = []
     for iStudy, study in enumerate(self.studies):
       if not LONG_STUDY_FLAG:
         # Calculate subtraction images.
@@ -653,11 +654,14 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       colorNode = slicer.util.getNode('GenericColors')
       labelNode.GetDisplayNode().SetAndObserveColorNodeID(colorNode.GetID())
       study.labelNode = labelNode
+      labelNodes.append(labelNode)
       
       # Attach to slice and volume displays.
       self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
       self.logic.maskFirstDiffNodeForVR(study)
       self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
+    
+    self.editor.setLabelNodes(labelNodes)
     
     self.resetUI()
     
@@ -733,7 +737,8 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         return
 
     self.setPatientInfo()
-      
+
+    labelNodes = []      
     for iStudy, study in enumerate(self.studies):
       if not LONG_STUDY_FLAG:
         # Calculate subtraction images.
@@ -751,12 +756,16 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         colorNode = slicer.util.getNode('GenericColors')
         labelNode.GetDisplayNode().SetAndObserveColorNodeID(colorNode.GetID())
         study.labelNode = labelNode
+        labelNodes.append(labelNode)
       
       # Attach to slice and volume displays.
       self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
       if not study.maskedDiffNode:
         self.logic.maskFirstDiffNodeForVR(study)
       self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
+    
+    # Set label nodes in editor.
+    self.editor.setLabelNodes(labelNodes)
     
     self.resetUI()
       

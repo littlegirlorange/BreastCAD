@@ -24,8 +24,8 @@ class LabelSummaryWidget(qt.QWidget):
     self.create()
 
     # mrml volume node instances
-    self._master = None
-    self._merge = None
+    self._labelNodes = []
+    self._labelNodeTags = {}
     
     self.structureLabelNames = []
 
@@ -50,50 +50,67 @@ class LabelSummaryWidget(qt.QWidget):
     self.deleteStructuresButton.connect("clicked()", self.deleteStructures)
     self.deleteSelectedStructureButton.connect("clicked()", self.deleteSelectedStructure)
 
-
   #---------------------------------------------------------------------------
   @property
-  def master(self):
-    return self._master
+  def labelNodes(self):
+    return self._labelNodes
 
   #---------------------------------------------------------------------------
-  @master.setter
-  def master(self, node):
-    self._master = node
-
-  #---------------------------------------------------------------------------
-  @property
-  def merge(self):
-    return self._merge
-
-  #---------------------------------------------------------------------------
-  @merge.setter
-  def merge(self, node):
-    print "LabelSummaryWidget: setting merge node"
-    if self._merge:
-      self._merge.RemoveObserver(self._mergeNodeTag)
-    self._merge = node
-    self._merge.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onMergeModified)
-    self.updateStructures()
+  @labelNodes.setter
+  def labelNodes(self, nodes):
+    print "LabelSummaryWidget: setting label node(s)"
+    update = False
+    for node in nodes:
+        name = node.GetName()
+        tag = node.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onLabelModified)
+        self._labelNodeTags[name] = tag
+        self._labelNodes.append(node)
+        update = True
+    if update:
+      self.updateStructures()
     
   #---------------------------------------------------------------------------
-  def setMerge(self, node):
-    print "LabelSummaryWidget: setting merge node"
-    if self._merge:
-      self._merge.RemoveObserver(self._mergeNodeTag)
-    self._merge = node
-    self._merge.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onMergeModified)
-    self.updateStructures()
+  def addLabelNodes(self, nodes):
+    print "LabelSummaryWidget: adding label node(s)"
+    update = False
+    for node in nodes:
+      if node not in self._labelNodes:
+        name = node.GetName()
+        tag = node.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onLabelModified)
+        self._labelNodeTags[name] = tag
+        self._labelNodes.append(node)
+        update = True
+    if update:
+      self.updateStructures()
+      
+  #---------------------------------------------------------------------------
+  def removeLabelNodes(self, nodes):
+    print "LabelSummaryWidget: removing label node(s)"
+    update = False
+    for node in nodes:
+      if node in self._labelNodes:
+        name = node.GetName()
+        tag = self._labelNodeTags[name]
+        if tag:
+          node.RemoveObserver(tag)
+          del self._labelNodeTags[name]
+        self._labelNodes.remove(node)
+        update = True
+    if update:
+      self.updateStructures() 
 
   #---------------------------------------------------------------------------
   def cleanup(self):
     if self.colorBox:
       self.colorBox.cleanup()
-    if self._merge:
-      self._merge.RemoveObserver(self._mergeNodeTag)
+    for node in self._labelNodes:
+      name = node.GetName()
+      tag = self._labelNodeTags[name]
+      if tag:
+        node.RemoveObserver(tag)
       
   #---------------------------------------------------------------------------
-  def onMergeModified(self, caller=None, event=None):
+  def onLabelModified(self, caller=None, event=None):
     self.updateStructures()
 
   #---------------------------------------------------------------------------
@@ -286,47 +303,42 @@ class LabelSummaryWidget(qt.QWidget):
   def edit(self, label):
     """select the picked label for editing"""
 
-    merge = self.merge
-    if not merge:
+    if len(self._labelNodes) == 0:
       return
     
     EditUtil.setLabel(label)
     
   #---------------------------------------------------------------------------    
-  def buildStructureList(self):
+  def buildStructureList(self, labelNode):
     """List all labels and their first slice locations
     """
     structureData = []
-    
-    merge = self.merge
-    if not merge:
-      return structureData
  
-    colorNode = merge.GetDisplayNode().GetColorNode()
+    colorNode = labelNode.GetDisplayNode().GetColorNode()
     lut = colorNode.GetLookupTable()    
     
     # Get label value range.
     accum = vtk.vtkImageAccumulate()
-    accum.SetInputConnection(merge.GetImageDataConnection())
+    accum.SetInputConnection(labelNode.GetImageDataConnection())
     accum.Update()
     lo = max(int(accum.GetMin()[0]), 1)
     hi = int(accum.GetMax()[0])
     
-    # Make sure label exists in merge node.
+    # Get all labels in range.
     thresholder = vtk.vtkImageThreshold()
     thresholder.SetNumberOfThreads(1)
     labelShapeStatisticsFilter = sitk.LabelShapeStatisticsImageFilter()
-    labelImage = sitkUtils.PullFromSlicer(merge.GetName())
+    labelImage = sitkUtils.PullFromSlicer(labelNode.GetName())
     outputImage = labelShapeStatisticsFilter.Execute(labelImage, 0, False, False) 
         
     for i in xrange(lo, hi+1):
-      thresholder.SetInputConnection(merge.GetImageDataConnection())
+      thresholder.SetInputConnection(labelNode.GetImageDataConnection())
       thresholder.SetInValue(i)
       thresholder.SetOutValue(0)
       thresholder.ReplaceInOn()
       thresholder.ReplaceOutOn()
       thresholder.ThresholdBetween(i,i)
-      thresholder.SetOutputScalarType(merge.GetImageData().GetScalarType())
+      thresholder.SetOutputScalarType(labelNode.GetImageData().GetScalarType())
       thresholder.Update()
       if thresholder.GetOutput().GetScalarRange() != (0.0, 0.0):
         # The label exists. Get the label index, color name and first slice.
@@ -352,81 +364,74 @@ class LabelSummaryWidget(qt.QWidget):
     self.structures = qt.QStandardItemModel()
     self.structuresView.setModel(self.structures)
 
-    # if no merge volume exists, disable everything - else enable
-    merge = self.merge
+#     # if no merge volume exists, disable everything - else enable
+#     merge = self.merge
+# 
+# #     self.addStructureButton.setDisabled(not merge)
+#     self.deleteStructuresButton.setDisabled(not merge)
+#     self.deleteSelectedStructureButton.setDisabled(not merge)
+#     if self.mergeValidCommand:
+#       # will be passed current
+#       self.mergeValidCommand(merge)
+# 
+#     if not merge:
+#       return
 
-#     self.addStructureButton.setDisabled(not merge)
-    self.deleteStructuresButton.setDisabled(not merge)
-    self.deleteSelectedStructureButton.setDisabled(not merge)
-    if self.mergeValidCommand:
-      # will be passed current
-      self.mergeValidCommand(merge)
-
-    if not merge:
-      return
-
-    # Get list of labels in this labelNode.
-    structureData = self.buildStructureList()
-    if len(structureData) == 0:
-      return
-
-    colorNode = merge.GetDisplayNode().GetColorNode()
-    lut = colorNode.GetLookupTable()
-    mergeName = merge.GetName()
-    
-    for i, structure in enumerate(structureData):
-      # structure = [labelIndex, labelName, firstSlice]
-      labelIndex = colorNode.GetColorIndexByName(structure[0])
-      labelColor = lut.GetTableValue(labelIndex)[0:3]
-      color = qt.QColor()
-      color.setRgb(labelColor[0]*255,labelColor[1]*255,labelColor[2]*255)
+    i = 0
+    for labelNode in self._labelNodes:
+      colorNode = labelNode.GetDisplayNode().GetColorNode()
+      lut = colorNode.GetLookupTable()
+      structureData = self.buildStructureList(labelNode)
+      labelNodeName = labelNode.GetName()
       
-      # label index
-      item = qt.QStandardItem()
-      item.setEditable(False)
-      item.setText(labelIndex)
-      self.structures.setItem(i,0, item)
+      for iStruct, structure in enumerate(structureData):
+        # structure = [labelIndex, labelName, firstSlice]
+        labelIndex = colorNode.GetColorIndexByName(structure[0])
+        labelColor = lut.GetTableValue(labelIndex)[0:3]
+        color = qt.QColor()
+        color.setRgb(labelColor[0]*255,labelColor[1]*255,labelColor[2]*255)
+        
+        # label index
+        item = qt.QStandardItem()
+        item.setEditable(False)
+        item.setText(labelIndex)
+        self.structures.setItem(i,0, item)
+  
+        # label color
+        item = qt.QStandardItem()
+        item.setEditable(False)
+        item.setData(color, 1)
+        self.structures.setItem(i, 1,  item)
 
-      # label color
-      item = qt.QStandardItem()
-      item.setEditable(False)
-      item.setData(color, 1)
-      self.structures.setItem(i, 1,  item)
+        # label node name
+        item = qt.QStandardItem()
+        item.setEditable(False)
+        item.setText(labelNodeName)
+        self.structures.setItem(i, 2, item)
+        
+        # slice
+        item = qt.QStandardItem()
+        item.setEditable(False)
+        item.setText(structure[2])
+        self.structures.setItem(i, 3, item)
+        
+        i += 1
 
-      # structure name
-      item = qt.QStandardItem()
-      item.setEditable(False)
-      item.setText(structure[1])
-      self.structures.setItem(i, 2, item)
-
-      # label node name
-      item = qt.QStandardItem()
-      item.setEditable(False)
-      item.setText(mergeName)
-      self.structures.setItem(i, 3, item)
-      
-      # slice
-      item = qt.QStandardItem()
-      item.setEditable(False)
-      item.setText(structure[2])
-      self.structures.setItem(i, 4, item)
-
-    for i in range(5):
-      self.structuresView.resizeColumnToContents(i)
-
-    self.structures.setHeaderData(0,1,"Contour")
+    self.structures.setHeaderData(0,1,"Label")
     self.structures.setHeaderData(1,1,"Color")
-    self.structures.setHeaderData(2,1,"Label")
-    self.structures.setHeaderData(3,1,"Label Volume")
-    self.structures.setHeaderData(4,1,"Slice")
+    self.structures.setHeaderData(2,1,"Label Volume")
+    self.structures.setHeaderData(3,1,"Slice")
+
     self.structuresView.setModel(self.structures)
+    for i in range(5):
+      self.structuresView.resizeColumnToContents(i)    
     self.structuresView.connect("activated(QModelIndex)", self.onStructureClicked)
     self.structuresView.setProperty('SH_ItemView_ActivateItemOnSingleClick', 1)
 
     self.structureLabelNames = []
     rows = self.structures.rowCount()
     for row in xrange(rows):
-      self.structureLabelNames.append(self.structures.item(row,2).text())
+      self.structureLabelNames.append(self.structures.item(row,0).text())
 
   #---------------------------------------------------------------------------
   def onStructureClicked(self, modelIndex):
@@ -434,7 +439,7 @@ class LabelSummaryWidget(qt.QWidget):
       self.edit(int(self.structures.item(modelIndex.row(),0).text()))
       self.jumpSlices = True
       if self.jumpSlices:
-        slice = int(self.structures.item(modelIndex.row(), 4).text())
+        slice = int(self.structures.item(modelIndex.row(), 3).text())
         self.setSlice(slice)
 
   #---------------------------------------------------------------------------

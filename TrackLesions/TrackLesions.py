@@ -227,6 +227,9 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     self.resetUI()
     
+    #
+    # Main panel
+    #
     mainCollapsibleButton = ctk.ctkCollapsibleButton()
     mainCollapsibleButton.text = "TrackLesions"
     self.layout.addWidget(mainCollapsibleButton)
@@ -237,10 +240,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     #
     # Patient area
     #
-#     patientCollapsibleButton = ctk.ctkCollapsibleButton()
-#     patientCollapsibleButton.text = "Patient"
-#     self.layout.addWidget(patientCollapsibleButton)
-#     patientFormLayout = qt.QFormLayout(patientCollapsibleButton)
     self.patientFormWidget = qt.QWidget()
     patientFormLayout = qt.QFormLayout()
     self.patientFormWidget.setLayout(patientFormLayout)
@@ -255,7 +254,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.patientLayoutBox.setLayout(qt.QFormLayout())    
     self.patientIdLabel = qt.QLabel()
     self.patientIdLabel.setText("<Select patient>")
-    #self.patientIdLabel.setAlignment(qt.Qt.AlignLeft | qt.Qt.AlignVCenter)
     self.patientLayoutBox.layout().addRow("Patient ID:", self.patientIdLabel)    
     self.patientInfoView = qt.QTreeView()
     self.patientInfoView.sortingEnabled = False
@@ -266,10 +264,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     #
     # View area
     #
-#     viewCollapsibleButton = ctk.ctkCollapsibleButton()
-#     viewCollapsibleButton.text = "View"
-#     self.layout.addWidget(viewCollapsibleButton)
-#     viewFormLayout = qt.QFormLayout(viewCollapsibleButton)
     self.viewFormWidget = qt.QWidget()
     viewFormLayout = qt.QFormLayout()
     self.viewFormWidget.setLayout(viewFormLayout)
@@ -454,7 +448,13 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       sliceLogic = sliceLogics.GetItemAsObject(i)
       sliceCompositeNode = sliceLogic.GetSliceCompositeNode()
       sliceCompositeNode.SetLinkedControl(1)
+      # Setting linked control and fitting slice to all does not propagate to
+      # all slice nodes. Must set ResetFieldOfViewFlag to make the change in
+      # slice nodes that are not mapped in layout.
+      sliceLogic.StartSliceNodeInteraction(8)  # vtkMRMLSliceNode::ResetFieldOfViewFlag
       sliceLogic.FitSliceToAll()
+      sliceLogic.GetSliceNode().UpdateMatrices()
+      sliceLogic.EndSliceNodeInteraction()   
 
     # Turn on navigation.
     crosshairNode = slicer.util.getNode("vtkMRMLCrosshairNode*")

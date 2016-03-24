@@ -12,7 +12,7 @@ import TrackLesionsParams_LongitudinalStudy as params
 import LabelStatsLogic
 
 
-customLayout = (
+compareLayout = (
     "<layout type=\"horizontal\">"
     " <item>"
     "  <view class=\"vtkMRMLSliceNode\" singletontag=\"Current_Sub1\">"
@@ -37,7 +37,7 @@ customLayout = (
     " </item>"    
     "</layout>")
   
-customLayoutId = 501
+compareLayoutId = 501
 
 currentFourUpView = (
   "<layout type=\"vertical\">"
@@ -171,6 +171,7 @@ past2FourUpViewId = 504
 #
 
 LONG_STUDY_FLAG = True
+VOLUME_RENDER = False
 
 class TrackLesions(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
@@ -215,18 +216,18 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     
     # Set custom layouts.
     layoutManager = slicer.app.layoutManager()
-    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
+    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(compareLayoutId, compareLayout)
     layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(currentFourUpViewId, currentFourUpView)
     layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(past1FourUpViewId, past1FourUpView)
-    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(past2FourUpViewId, past2FourUpView)    
+    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(past2FourUpViewId, past2FourUpView)
+    # Have to call setLayout for all layouts to force creation of slice widgets    
     layoutManager.setLayout(currentFourUpViewId)
     layoutManager.setLayout(past1FourUpViewId)
     layoutManager.setLayout(past2FourUpViewId)
-    layoutManager.setLayout(customLayoutId)
+    layoutManager.setLayout(compareLayoutId)
     self.currentView = 'CompareView'
+    self.setLinkedControl()
 
-    self.resetUI()
-    
     #
     # Main panel
     #
@@ -422,40 +423,50 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.sliceWidgetsPerStyle = {}
 
   def addObservers(self):
-    # Get new slice nodes
-    layoutManager = slicer.app.layoutManager()
-    sliceNodeCount = slicer.mrmlScene.GetNumberOfNodesByClass('vtkMRMLSliceNode')
-    for nodeIndex in xrange(sliceNodeCount):
-      # Find the widget for each node in scene
-      sliceNode = slicer.mrmlScene.GetNthNodeByClass(nodeIndex, 'vtkMRMLSliceNode')
-      sliceWidget = layoutManager.sliceWidget(sliceNode.GetLayoutName())
-      if sliceWidget:
-        # Add observers and keep track of tags
-        style = sliceWidget.sliceView().interactorStyle()
-        self.sliceWidgetsPerStyle[style] = sliceWidget
-        tag = style.AddObserver("LeftButtonReleaseEvent", self.processEvent)
-        self.styleObserverTags.append([style, tag])
+    # Observe left button releases in all TrackLesions slice widgets.
+    for timePoint in self.timePoints:
+      for name in self.sliceWidgetNames:
+        sliceWidgetName = timePoint + "_" + name
+        sliceWidget = slicer.app.layoutManager().sliceWidget(sliceWidgetName)
+        if sliceWidget:
+          style = sliceWidget.sliceView().interactorStyle()
+          self.sliceWidgetsPerStyle[style] = sliceWidget
+          tag = style.AddObserver("LeftButtonReleaseEvent", self.processEvent)
+          self.styleObserverTags.append([style, tag])
 
   def cleanup(self):
     self.removeObservers()
-    
   
-  def resetUI(self):
-    # Link views.
-    layoutManager = slicer.app.layoutManager()    
-    sliceLogics = layoutManager.mrmlSliceLogics()
-    for i in xrange(sliceLogics.GetNumberOfItems()):
-      sliceLogic = sliceLogics.GetItemAsObject(i)
-      sliceCompositeNode = sliceLogic.GetSliceCompositeNode()
-      sliceCompositeNode.SetLinkedControl(1)
-      # Setting linked control and fitting slice to all does not propagate to
-      # all slice nodes. Must set ResetFieldOfViewFlag to make the change in
-      # slice nodes that are not mapped in layout.
+      
+  def resetFieldOfViewForTheFirstTime(self):
+    # Have to display each layout using processEvents() in order for each
+    # slice node to be created and know its true size. This flickers and is slow,
+    # but it's the only way to make all slice nodes have the same FOV.
+    layoutIds = [currentFourUpViewId, past1FourUpViewId, past2FourUpViewId, compareLayoutId]
+    viewNames = ["CompareView", "CurrentView", "Past1View", "Past2View"]
+    widgetNames = ["Current_Sub1", "Past1_Sub1", "Past2_Sub2", "Current_Sub1"]
+    layoutManager = slicer.app.layoutManager()
+    for i, id in enumerate(layoutIds):
+      layoutManager.setLayout(id)
+      slicer.app.processEvents()
+      sliceLogic = layoutManager.sliceWidget(widgetNames[i]).sliceLogic()    
       sliceLogic.StartSliceNodeInteraction(8)  # vtkMRMLSliceNode::ResetFieldOfViewFlag
       sliceLogic.FitSliceToAll()
       sliceLogic.GetSliceNode().UpdateMatrices()
-      sliceLogic.EndSliceNodeInteraction()   
-
+      sliceLogic.EndSliceNodeInteraction()
+    self.setView(self.currentView)
+    
+  
+  def resetFieldOfView(self):
+    layoutManager = slicer.app.layoutManager()
+    sliceLogic = layoutManager.sliceWidget("Current_Sub1").sliceLogic()
+    sliceLogic.StartSliceNodeInteraction(8)  # vtkMRMLSliceNode::ResetFieldOfViewFlag
+    sliceLogic.FitSliceToAll()
+    sliceLogic.GetSliceNode().UpdateMatrices()
+    sliceLogic.EndSliceNodeInteraction()
+      
+        
+  def resetUI(self):
     # Turn on navigation.
     crosshairNode = slicer.util.getNode("vtkMRMLCrosshairNode*")
     if crosshairNode:
@@ -524,17 +535,17 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   def setView(self, newView):
     layoutManager = slicer.app.layoutManager()
     if newView == 'CompareView':
-      layoutManager.setLayout(customLayoutId)
+      layoutManager.setLayout(compareLayoutId)
     elif newView == 'CurrentView':
       layoutManager.setLayout(currentFourUpViewId)
     elif newView == 'Past1View':
       layoutManager.setLayout(past1FourUpViewId)
     else:
       layoutManager.setLayout(past2FourUpViewId)
-    self.currentView = newView
+    self.currentView = newView  
     
 
-  def updateSliceWidget(self, widget, layer, nodeID, fitToBackground=False):
+  def updateSliceWidget(self, widget, layer, nodeID):
     sliceWidget = slicer.app.layoutManager().sliceWidget(widget)
     sliceLogic = sliceWidget.sliceLogic()
     if layer == "Foreground":
@@ -544,10 +555,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     elif layer == "Label":
       sliceLogic.GetSliceCompositeNode().SetLabelVolumeID(nodeID)
     else:
-      logging.debug("updateSliceWidget failed: invalid layer: " + layer)
-    if fitToBackground:
-      sliceWidget.fitSliceToBackground()
-    print(("Updated widget: {0}, layer: {1}, nodeId: {2}").format(widget, layer, nodeID))
+      logging.debug("updateSliceWidget failed: invalid layer: " + layer)       
     
     
   def getSliceWidgets(self, name="*", orientation="*"):
@@ -593,7 +601,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
                                         qt.QMessageBox.Cancel)
       if qResult == qt.QMessageBox.Cancel:
         return
-      elif qResults == qt.QMessageBox.Save:
+      elif qResult == qt.QMessageBox.Save:
         errorList = []
         for study in self.studies:
           if study.labelNode:
@@ -610,7 +618,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       slicer.mrmlScene.Clear(0)
       self.resetUI()
       self.resetParameterNode()
-      self.resetSelf()
+      #self.resetSelf()
        
     # Pop up open data dialog.
     if not slicer.util.openAddDataDialog():
@@ -632,11 +640,12 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.setPatientInfo()
     
     labelNodes = []
+    views = ["CurrentView", "Past1View", "Past2View"]
     for iStudy, study in enumerate(self.studies):
       if not LONG_STUDY_FLAG:
         # Calculate subtraction images.
         self.logic.calculateSubtractionImages(study)
-      else:
+      else:       
         # Set windowing of subtraction images (don't show negative values).
         for volumeNode in study.diffNodes:
           imageData = vtk.vtkImageData()
@@ -646,7 +655,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
           displayNode.SetAutoWindowLevel(0)
           #displayNode.SetThreshold(0, scalarRange[1])
           displayNode.SetWindowLevelMinMax(0, scalarRange[1])
-      
+        
       # Set up label nodes for lesion contouring.
       volumeNode = study.diffNodes[0]
       labelNodeName = volumeNode.GetName() + "_label"
@@ -658,12 +667,14 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       
       # Attach to slice and volume displays.
       self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
-      self.logic.maskFirstDiffNodeForVR(study)
-      self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
+      
+      if VOLUME_RENDER:
+        self.logic.maskFirstDiffNodeForVR(study)
+        self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
     
     self.editor.setLabelNodes(labelNodes)
     
-    self.resetUI()
+    self.resetFieldOfViewForTheFirstTime()
     
     # Enable view and contour features.
     self.viewFormWidget.setEnabled(True)
@@ -760,14 +771,15 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       
       # Attach to slice and volume displays.
       self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
-      if not study.maskedDiffNode:
-        self.logic.maskFirstDiffNodeForVR(study)
-      self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
+      if VOLUME_RENDER:
+        if not study.maskedDiffNode:
+          self.logic.maskFirstDiffNodeForVR(study)
+        self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
     
     # Set label nodes in editor.
     self.editor.setLabelNodes(labelNodes)
     
-    self.resetUI()
+    #self.resetUI()
       
     # Set slice selector.
     dims = self.studies[0].diffNodes[0].GetImageData().GetDimensions()
@@ -814,7 +826,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     if timePoint in self.timePoints:
       for iDiffNode in range(len(study.diffNodes)):
         widget = timePoint + "_" + self.sliceWidgetNames[iDiffNode]
-        self.updateSliceWidget(widget, "Background", study.diffNodes[iDiffNode].GetID(), True)
+        self.updateSliceWidget(widget, "Background", study.diffNodes[iDiffNode].GetID())
         self.updateSliceWidget(widget, "Foreground", None)
         if study.labelNode:
           self.updateSliceWidget(widget, "Label", study.labelNode.GetID())
@@ -1660,99 +1672,6 @@ class TrackLesionsTest(ScriptedLoadableModuleTest):
 #     self.assertTrue( logic.hasImageData(volumeNode) )
 #     self.delayDisplay('Test passed!')
     
-
-import string
-import SimpleITK as sitk
-import sitkUtils
-
-class LabelStatsLogic:
-  """This Logic is copied from the Label Statistics Module -Steve Pieper (Isomics)"""
-  """Implement the logic to calculate label statistics.
-  Nodes are passed in as arguments.
-  Results are stored as 'statistics' instance variable.
-  """
-  
-  HEADER_KEYS = ("Index", "Count", "Volume mm^3", "DimX mm", "DimY mm", "DimZ mm", "COMX mm", "COMY mm", "COMZ mm", "Min", "Max", "Mean", "StdDev", "LabelNode", "ImageNode")
-  
-  def __init__(self, labelNode, label=None, grayscaleNode=None):
-    
-    volumeName = grayscaleNode.GetName()
-    #self.keys = ("Index", "Count", "Volume mm^3", "DimX mm", "DimY mm", "DimZ mm", "COMX mm", "COMY mm", "COMZ mm", "Min", "Max", "Mean", "StdDev", "LabelNode", "ImageNode")
-    cubicMMPerVoxel = reduce(lambda x,y: x*y, labelNode.GetSpacing())
-    self.labelStats = {}
-    self.labelStats['Labels'] = []
-    
-    # Set up VTK histogram statistics filter.
-    stataccum = vtk.vtkImageAccumulate()
-    stataccum.SetInputConnection(labelNode.GetImageDataConnection())
-    stataccum.Update()
-
-    if not grayscaleNode:
-      grayscaleNode = labelNode
-      
-    if label:
-      lo = label
-      hi = label
-    else:
-      lo = int(stataccum.GetMin()[0])
-      hi = int(stataccum.GetMax()[0])
-      if lo == 0:
-        # Don't calculate statistics for the background.
-        if hi == 0:
-          # No label.
-          return
-        lo = 1
-    
-    # Set up SimpleITK shape statistics filter for label node.
-    voxDims = labelNode.GetSpacing()
-    labelName = labelNode.GetName()
-    labelImage = sitkUtils.PullFromSlicer(labelName)
-    labelShapeStatisticsFilter = sitk.LabelShapeStatisticsImageFilter()
-    outputImage = labelShapeStatisticsFilter.Execute(labelImage, 0, False, False)    
-
-    for i in xrange(lo, hi + 1):
-      thresholder = vtk.vtkImageThreshold()
-      thresholder.SetInputConnection(labelNode.GetImageDataConnection())
-      thresholder.SetInValue(1)
-      thresholder.SetOutValue(0)
-      thresholder.ReplaceOutOn()
-      thresholder.ThresholdBetween(i, i)
-      thresholder.SetOutputScalarType(grayscaleNode.GetImageData().GetScalarType())
-      thresholder.Update()
-
-      stencil = vtk.vtkImageToImageStencil()
-      stencil.SetInputConnection(thresholder.GetOutputPort())
-      stencil.ThresholdBetween(1, 1)
-      
-      stat1 = vtk.vtkImageAccumulate()
-      stat1.SetInputConnection(grayscaleNode.GetImageDataConnection())
-      stencil.Update()
-      stat1.SetStencilData(stencil.GetOutput())
-      stat1.Update()
-
-      if stat1.GetVoxelCount() > 0:
-        
-        vol = labelShapeStatisticsFilter.GetPhysicalSize(i)
-        dims = labelShapeStatisticsFilter.GetBoundingBox(i)  # [x0, y0, z0, dx, dy, dz]
-        com = labelShapeStatisticsFilter.GetCentroid(i)
-                
-        # add an entry to the LabelStats list
-        self.labelStats["Labels"].append(i)
-        self.labelStats[i,"Index"] = i
-        self.labelStats[i,"Count"] = stat1.GetVoxelCount()
-        self.labelStats[i,"Volume mm^3"] = "{0:.1f}".format(vol)
-        self.labelStats[i,"DimX mm"] = "{0:.1f}".format(dims[3]*voxDims[0])
-        self.labelStats[i,"DimY mm"] = "{0:.1f}".format(dims[4]*voxDims[1])
-        self.labelStats[i,"DimZ mm"] = "{0:.1f}".format(dims[5]*voxDims[2])
-        self.labelStats[i,"COMX mm"] = "{0:.1f}".format(-com[0])  # Convert from LPS to RAS
-        self.labelStats[i,"COMY mm"] = "{0:.1f}".format(-com[1])  # Convert from LPS to RAS
-        self.labelStats[i,"COMZ mm"] = "{0:.1f}".format(com[2])
-        self.labelStats[i,"Min"] = stat1.GetMin()[0]
-        self.labelStats[i,"Max"] = stat1.GetMax()[0]
-        self.labelStats[i,"Mean"] = "{0:.1f}".format(stat1.GetMean()[0])
-        self.labelStats[i,"StdDev"] = "{0:.1f}".format(stat1.GetStandardDeviation()[0])
-        self.labelStats[i,"LabelNode"] = labelName
-        self.labelStats[i,"ImageNode"] = grayscaleNode.GetName()
         
 class CADStudy:
   def __init__(self, patientId, studyDate, accessionNo):

@@ -2,13 +2,17 @@ import qt
 import slicer
 import vtk
 
-import SimpleITK as sitk
-import sitkUtils
-
 from fnmatch import fnmatch
 
 from EditUtil import EditUtil
 from ColorBox import ColorBox
+
+HAVE_SIMPLEITK=True
+try:
+  import SimpleITK as sitk
+  import sitkUtils
+except ImportError:
+  HAVE_SIMPLEITK=False
 
 
 #=============================================================================
@@ -327,9 +331,10 @@ class LabelSummaryWidget(qt.QWidget):
     # Get all labels in range.
     thresholder = vtk.vtkImageThreshold()
     thresholder.SetNumberOfThreads(1)
-    labelShapeStatisticsFilter = sitk.LabelShapeStatisticsImageFilter()
-    labelImage = sitkUtils.PullFromSlicer(labelNode.GetName())
-    outputImage = labelShapeStatisticsFilter.Execute(labelImage, 0, False, False) 
+    if HAVE_SIMPLEITK:
+      labelShapeStatisticsFilter = sitk.LabelShapeStatisticsImageFilter()
+      labelImage = sitkUtils.PullFromSlicer(labelNode.GetName())
+      outputImage = labelShapeStatisticsFilter.Execute(labelImage, 0, False, False) 
         
     for i in xrange(lo, hi+1):
       thresholder.SetInputConnection(labelNode.GetImageDataConnection())
@@ -345,8 +350,14 @@ class LabelSummaryWidget(qt.QWidget):
         labelRow = []        
         labelRow.append(str(i)) # label index
         labelRow.append(colorNode.GetColorName(i)) # label name
-        dims = labelShapeStatisticsFilter.GetBoundingBox(i)  # [x0, y0, z0, dx, dy, dz]             
-        labelRow.append(str(dims[2])) # first slice
+        # SimpleITK must be disabled for the debug version of Slicer 4.5.
+        if HAVE_SIMPLEITK:
+          dims = labelShapeStatisticsFilter.GetBoundingBox(i)  # [x0, y0, z0, dx, dy, dz]
+          minZ = dims[2]
+        else:
+          # World's slowest method.
+          minZ = self.getFirstSlice(thresholder.GetOutput())
+        labelRow.append(str(minZ)) # first slice
         structureData.append(labelRow)
         
     return structureData
@@ -478,8 +489,13 @@ class LabelSummaryWidget(qt.QWidget):
   #---------------------------------------------------------------------------
   def statusText(self, text):
     slicer.util.showStatusMessage( text,1000 )
-    
+
   #---------------------------------------------------------------------------
-
-
-    
+  def getFirstSlice(self, imageData):
+    extent = imageData.GetExtent()
+    for k in xrange(extent[4], extent[5]+1):
+      for j in xrange(extent[2], extent[3]+1):
+        for i in xrange(extent[0], extent[1]+1):
+          if int(imageData.GetScalarComponentAsDouble(i, j, k, 0)) != 0:
+            return k
+    return -1

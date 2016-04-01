@@ -43,3 +43,7 @@ Thumbs.db
 # Editor/debugger files #
 #########################
 TrackLesions/.metadata/
+TrackLesions/.project
+TrackLesions/.pydevproject
+.idea/
+.metadata/

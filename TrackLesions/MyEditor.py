@@ -1,11 +1,9 @@
-import os
 import slicer
 import qt, ctk, vtk
 from slicer.util import VTKObservationMixin
 import MyEditorLib
 from MyEditorLib.EditUtil import EditUtil
 from MyEditorLib.LabelSummaryWidget import LabelSummaryWidget
-
 
 
 #

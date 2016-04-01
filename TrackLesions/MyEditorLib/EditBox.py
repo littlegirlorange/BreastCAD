@@ -441,6 +441,8 @@ class EditBox(VTKObservationMixin):
   def updateUndoRedoButtons(self):
     self.effectButtons["PreviousCheckPoint"].enabled = self.undoRedo.undoEnabled()
     self.effectButtons["NextCheckPoint"].enabled = self.undoRedo.redoEnabled()
+    print "Undo enabled = " + str(self.undoRedo.undoEnabled())
+    print "Redo enabled = " + str(self.undoRedo.redoEnabled())
 
   def isFloatingMode(self):
     return self.mainFrame.parent() is None

@@ -1,7 +1,12 @@
 import vtk, qt, ctk, slicer
 import string
-import SimpleITK as sitk
-import sitkUtils
+
+HAVE_SIMPLEITK=True
+try:
+  import SimpleITK as sitk
+  import sitkUtils
+except ImportError:
+  HAVE_SIMPLEITK=False
 
 
 class LabelStatsLogic:
@@ -16,7 +21,7 @@ class LabelStatsLogic:
   def __init__(self, labelNode, label=None, grayscaleNode=None):
     
     #self.keys = ("Index", "Count", "Volume mm^3", "DimX mm", "DimY mm", "DimZ mm", "COMX mm", "COMY mm", "COMZ mm", "Min", "Max", "Mean", "StdDev", "LabelNode", "ImageNode")
-    cubicMMPerVoxel = reduce(lambda x,y: x*y, labelNode.GetSpacing())
+    #cubicMMPerVoxel = reduce(lambda x,y: x*y, labelNode.GetSpacing())
     self.labelStats = {}
     self.labelStats['Labels'] = []
     
@@ -44,9 +49,10 @@ class LabelStatsLogic:
     # Set up SimpleITK shape statistics filter for label node.
     voxDims = labelNode.GetSpacing()
     labelName = labelNode.GetName()
-    labelImage = sitkUtils.PullFromSlicer(labelName)
-    labelShapeStatisticsFilter = sitk.LabelShapeStatisticsImageFilter()
-    outputImage = labelShapeStatisticsFilter.Execute(labelImage, 0, False, False)    
+    if HAVE_SIMPLEITK:
+      labelImage = sitkUtils.PullFromSlicer(labelName)
+      labelShapeStatisticsFilter = sitk.LabelShapeStatisticsImageFilter()
+      outputImage = labelShapeStatisticsFilter.Execute(labelImage, 0, False, False)    
 
     for i in xrange(lo, hi + 1):
       thresholder = vtk.vtkImageThreshold()
@@ -70,26 +76,34 @@ class LabelStatsLogic:
 
       if stat1.GetVoxelCount() > 0:
         
-        vol = labelShapeStatisticsFilter.GetPhysicalSize(i)
-        dims = labelShapeStatisticsFilter.GetBoundingBox(i)  # [x0, y0, z0, dx, dy, dz]
-        com = labelShapeStatisticsFilter.GetCentroid(i)
-                
         # add an entry to the LabelStats list
         self.labelStats["Labels"].append(i)
         self.labelStats[i,"Index"] = i
         self.labelStats[i,"Count"] = stat1.GetVoxelCount()
-        self.labelStats[i,"Volume mm^3"] = "{0:.1f}".format(vol)
-        self.labelStats[i,"DimX mm"] = "{0:.1f}".format(dims[3]*voxDims[0])
-        self.labelStats[i,"DimY mm"] = "{0:.1f}".format(dims[4]*voxDims[1])
-        self.labelStats[i,"DimZ mm"] = "{0:.1f}".format(dims[5]*voxDims[2])
-        self.labelStats[i,"COMX mm"] = "{0:.1f}".format(-com[0])  # Convert from LPS to RAS
-        self.labelStats[i,"COMY mm"] = "{0:.1f}".format(-com[1])  # Convert from LPS to RAS
-        self.labelStats[i,"COMZ mm"] = "{0:.1f}".format(com[2])
         self.labelStats[i,"Min"] = stat1.GetMin()[0]
         self.labelStats[i,"Max"] = stat1.GetMax()[0]
         self.labelStats[i,"Mean"] = "{0:.1f}".format(stat1.GetMean()[0])
         self.labelStats[i,"StdDev"] = "{0:.1f}".format(stat1.GetStandardDeviation()[0])
         self.labelStats[i,"LabelNode"] = labelName
-        self.labelStats[i,"ImageNode"] = grayscaleNode.GetName()
-
+        self.labelStats[i,"ImageNode"] = grayscaleNode.GetName()  
+                       
+        if HAVE_SIMPLEITK:
+          vol = labelShapeStatisticsFilter.GetPhysicalSize(i)
+          dims = labelShapeStatisticsFilter.GetBoundingBox(i)  # [x0, y0, z0, dx, dy, dz]
+          com = labelShapeStatisticsFilter.GetCentroid(i)
+          self.labelStats[i,"Volume mm^3"] = "{0:.1f}".format(vol)
+          self.labelStats[i,"DimX mm"] = "{0:.1f}".format(dims[3]*voxDims[0])
+          self.labelStats[i,"DimY mm"] = "{0:.1f}".format(dims[4]*voxDims[1])
+          self.labelStats[i,"DimZ mm"] = "{0:.1f}".format(dims[5]*voxDims[2])
+          self.labelStats[i,"COMX mm"] = "{0:.1f}".format(-com[0])  # Convert from LPS to RAS
+          self.labelStats[i,"COMY mm"] = "{0:.1f}".format(-com[1])  # Convert from LPS to RAS
+          self.labelStats[i,"COMZ mm"] = "{0:.1f}".format(com[2])
+        else:
+          self.labelStats[i,"Volume mm^3"] = "N/A"
+          self.labelStats[i,"DimX mm"] = "N/A"
+          self.labelStats[i,"DimY mm"] = "N/A"
+          self.labelStats[i,"DimZ mm"] = "N/A"
+          self.labelStats[i,"COMX mm"] = "N/A"
+          self.labelStats[i,"COMY mm"] = "N/A"
+          self.labelStats[i,"COMZ mm"] = "N/A"
 

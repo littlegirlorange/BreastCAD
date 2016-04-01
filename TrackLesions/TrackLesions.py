@@ -1,12 +1,10 @@
-import os
-import unittest
-import vtk, qt, ctk, slicer, numpy
+﻿import os
+import vtk, qt, ctk, slicer
 import vtkITK
 from fnmatch import fnmatch
 from slicer.ScriptedLoadableModule import *
 import logging
 import MyEditor
-import MyEditorLib
 from MyEditorLib.EditUtil import EditUtil
 import TrackLesionsParams_LongitudinalStudy as params
 import LabelStatsLogic
@@ -177,7 +175,6 @@ class TrackLesions(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
-
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
     self.parent.title = "TrackLesions"
@@ -210,8 +207,8 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.sliceWidgetsPerStyle = {}   
     self.studies = []
     self.currentDirectory = ""
-    self.logic = TrackLesionsLogic()  
-    
+    self.logic = TrackLesionsLogic()
+        
     # Instantiate and connect widgets ...
     
     # Set custom layouts.
@@ -306,6 +303,12 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.resetWindowingButton.enabled = True
     viewFormLayout.addRow(self.resetWindowingButton)
          
+    # Reset FOV button
+    self.resetFovButton = qt.QPushButton("Reset Field of View")
+    self.resetFovButton.toolTip = "Re-center images and fit to field of view."
+    self.resetFovButton.enabled = True
+    viewFormLayout.addRow(self.resetFovButton)
+    
     # Reset views button
     self.resetViewsButton = qt.QPushButton("Reset Data in Views")
     self.resetViewsButton.toolTip = "Load default volumes in views."
@@ -315,10 +318,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     #
     # Contour area
     #
-#     contourCollapsibleButton = ctk.ctkCollapsibleButton()
-#     contourCollapsibleButton.text = "Contour"
-#     self.layout.addWidget(contourCollapsibleButton)
-#     contourFormLayout = qt.QFormLayout(contourCollapsibleButton)
     self.contourFormWidget = qt.QWidget()
     contourFormLayout = qt.QVBoxLayout()
     self.contourFormWidget.setLayout(contourFormLayout)
@@ -332,7 +331,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.editor = MyEditor.EditorWidget(self.contourFormWidget, False)
     
     # Save contours button
-    self.saveContoursButton = qt.QPushButton("Save contours")
+    self.saveContoursButton = qt.QPushButton("Save Contours")
     self.saveContoursButton.toolTip = "Save contours as .mha label maps."
     self.saveContoursButton.enabled = True
     contourFormLayout.addWidget(self.saveContoursButton)
@@ -343,7 +342,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     analysisCollapsibleButton = ctk.ctkCollapsibleButton()
     analysisCollapsibleButton.text = "Analysis"
     analysisCollapsibleButton.collapsed = True
-    #self.layout.addWidget(analysisCollapsibleButton)
 
     # Layout within the dummy collapsible button
     analysisFormLayout = qt.QFormLayout(analysisCollapsibleButton)
@@ -406,7 +404,8 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.currentViewRadioButton.connect('clicked()', self.onViewSelected)
     self.past1ViewRadioButton.connect('clicked()', self.onViewSelected)
     self.past2ViewRadioButton.connect('clicked()', self.onViewSelected) 
-    self.resetWindowingButton.connect('clicked()', self.onResetWindowing)  
+    self.resetWindowingButton.connect('clicked()', self.onResetWindowing) 
+    self.resetFovButton.connect('clicked()', self.resetFieldOfView) 
     self.resetViewsButton.connect('clicked()', self.onResetViews) 
     self.saveContoursButton.connect('clicked()', self.onSaveContours)     
     self.findIslandsButton.connect('clicked(bool)', self.onConvertMapToLabelButton)
@@ -414,15 +413,14 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.queryIslandsButton.connect('toggled(bool)', self.onQueryIslandsButtonToggled)    
     self.Button.connect('clicked(bool)', self.onButton)
       
-
-  def removeObservers(self):
+  def removeLeftButtonObservers(self):
     # Remove observers and reset
     for observee, tag in self.styleObserverTags:
       observee.RemoveObserver(tag)
     self.styleObserverTags = []
     self.sliceWidgetsPerStyle = {}
 
-  def addObservers(self):
+  def addLeftButtonObservers(self):
     # Observe left button releases in all TrackLesions slice widgets.
     for timePoint in self.timePoints:
       for name in self.sliceWidgetNames:
@@ -434,10 +432,14 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
           tag = style.AddObserver("LeftButtonReleaseEvent", self.processEvent)
           self.styleObserverTags.append([style, tag])
 
+  def clearParams(self):
+    self.studies = []
+    self.currentDirectory = ""
+
   def cleanup(self):
-    self.removeObservers()
-  
-      
+    self.removeLeftButtonObservers()
+    self.clearParams()
+    
   def resetFieldOfViewForTheFirstTime(self):
     # Have to display each layout using processEvents() in order for each
     # slice node to be created and know its true size. This flickers and is slow,
@@ -466,15 +468,19 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     sliceLogic.EndSliceNodeInteraction()
       
         
-  def resetUI(self):
+  def setNavigation(self, bool):
     # Turn on navigation.
     crosshairNode = slicer.util.getNode("vtkMRMLCrosshairNode*")
     if crosshairNode:
-      crosshairNode.SetCrosshairMode(5)
-      crosshairNode.SetNavigation(1)
+      if bool:
+        crosshairNode.SetCrosshairMode(5)
+        crosshairNode.SetNavigation(1)
+      else:
+        crosshairNode.SetCrosshairMode(1)
+        crosshairNode.SetNavigation(0)
       
 
-  def resetParameterNode(self):
+  def resetGuiPanel(self):
     # Reset current patient.
     self.setPatientInfo(reset=True)
 
@@ -596,36 +602,34 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     # Prompt to close current scene if data is currently loaded.
     if len(self.studies) > 0:
       qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Close patient", 
-                                        "Close the current patient? \nUnsaved changes will be lost.", 
-                                        qt.QMessageBox.Save | qt.QMessageBox.Discard | qt.QMessageBox.Cancel,
+                                        "Close the current patient?\nPress Cancel to continue working with this patient.", 
+                                        qt.QMessageBox.Ok | qt.QMessageBox.Cancel,
                                         qt.QMessageBox.Cancel)
       if qResult == qt.QMessageBox.Cancel:
         return
-      elif qResult == qt.QMessageBox.Save:
-        errorList = []
-        for study in self.studies:
-          if study.labelNode:
-            bOk = self.saveVTKAsMHA(study.labelNode, self.currentDirectory)
-            if not bOk:
-              errorList.append(study.labelNode.GetName())
-          else:
-            errorList.append(study.labelNode.GetName())
-        if len(errorList) > 0:
-          qResult = qt.QMessageBox.error(slicer.util.mainWindow(), "Close patient",
-                                         "Error saving {0}.".format("\n".join(errorList)),
-                                         qt.QMessageBox.Ok, qt.QMessageBox.Ok)
               
       slicer.mrmlScene.Clear(0)
-      self.resetUI()
-      self.resetParameterNode()
-      #self.resetSelf()
+      self.resetGuiPanel()
+      self.clearParams()
+      self.removeLeftButtonObservers()
        
-    # Pop up open data dialog.
-    if not slicer.util.openAddDataDialog():
+    # Create custom Qt dialog here instead of using slicer.util.openadddatadialog() to avoid
+    # loaded scenes and other non-.mha data.
+    dir = qt.QFileDialog.getExistingDirectory(slicer.util.mainWindow(), 
+                                              "Select Patient Folder", "", 
+                                              qt.QFileDialog.DontUseNativeDialog)
+    if not dir:
       return
+
+    retNodes = []
+    for root, dirs, files in os.walk(dir):
+      for file in files:
+        if file.endswith(".mha"):
+          retNode = slicer.util.loadVolume(os.path.join(root, file), returnNode=True)
+          retNodes.append(retNode)
     
     # Sort input data into separate studies.
-    self.studies = self.logic.sortVolumeNodes()
+    self.studies = self.logic.sortVolumeNodes(retNodes)
     if len(self.studies) == 0:
       qt.QMessageBox.warning(slicer.util.mainWindow(), "Load patient",
                              "Incomplete patient folder. \nUnable to process.")
@@ -634,13 +638,38 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Set current directory for saving label volumes.
     diffNodeFilename = self.studies[0].diffNodes[0].GetStorageNode().GetFileName()
-    self.currentDirectory = os.path.dirname(diffNodeFilename)
+    self.currentDirectory = os.path.dirname(diffNodeFilename)    
+    slicer.mrmlScene.SetRootDirectory(self.currentDirectory)
     
-    # Display patient info in main GUI panet.
+    
+    # Display patient info in main GUI panel.
     self.setPatientInfo()
     
+    # Check to see if existing label nodes were loaded.
+    labelNodeDict = slicer.util.getNodes(pattern="*_label*")
+    nNodes = len(labelNodeDict)
+    if nNodes > 0:
+      intVals = []
+      for node in labelNodeDict.values():
+        name = node.GetName()
+        parts = name.split("_label_")
+        if len(parts) == 1:
+          # The basename is *_label
+          intVal = 0
+        else:
+          try:
+            # The basename is *_label_<int>
+            intVal = int(parts[-1])
+          except ValueError:
+            # The basename is *_label_<string>
+            intVal = 0
+        intVals.append(intVal)
+      overallMax = max(intVals)
+      postfix = "_" + str(overallMax + 1)
+    else:
+      postfix = ""
+    
     labelNodes = []
-    views = ["CurrentView", "Past1View", "Past2View"]
     for iStudy, study in enumerate(self.studies):
       if not LONG_STUDY_FLAG:
         # Calculate subtraction images.
@@ -658,12 +687,16 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         
       # Set up label nodes for lesion contouring.
       volumeNode = study.diffNodes[0]
-      labelNodeName = volumeNode.GetName() + "_label"
+      labelNodeName = volumeNode.GetName() + "_label" + postfix
       labelNode = slicer.modules.volumes.logic().CreateAndAddLabelVolume(slicer.mrmlScene, volumeNode, labelNodeName)
       colorNode = slicer.util.getNode('GenericColors')
       labelNode.GetDisplayNode().SetAndObserveColorNodeID(colorNode.GetID())
+      storageNode = labelNode.CreateDefaultStorageNode()
+      slicer.mrmlScene.AddNode(storageNode)
+      labelNode.SetAndObserveStorageNodeID(storageNode.GetID())
+      storageNode.SetFileName(self.currentDirectory+os.sep+labelNode.GetName()+".mha")
       study.labelNode = labelNode
-      labelNodes.append(labelNode)
+      labelNodes.append(labelNode)      
       
       # Attach to slice and volume displays.
       self.attachStudyToSliceWidgets(study, self.timePoints[iStudy])
@@ -766,6 +799,10 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         labelNode = slicer.modules.volumes.logic().CreateAndAddLabelVolume(slicer.mrmlScene, volumeNode, labelNodeName)
         colorNode = slicer.util.getNode('GenericColors')
         labelNode.GetDisplayNode().SetAndObserveColorNodeID(colorNode.GetID())
+        storageNode = labelNode.CreateDefaultStorageNode()
+        slicer.mrmlScene.AddNode(storageNode)
+        labelNode.SetAndObserveStorageNodeID(storageNode.GetID())
+        storageNode.SetFileName(self.currentDirectory+os.sep+labelNode.GetName()+".mha")
         study.labelNode = labelNode
         labelNodes.append(labelNode)
       
@@ -779,8 +816,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     # Set label nodes in editor.
     self.editor.setLabelNodes(labelNodes)
     
-    #self.resetUI()
-      
     # Set slice selector.
     dims = self.studies[0].diffNodes[0].GetImageData().GetDimensions()
     maxSliceNo = dims[2]+1
@@ -795,21 +830,60 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   # Contouring methods
   #
   def onSaveContours(self):
+    # Prompt for folder to save to.
+    directory = qt.QFileDialog.getExistingDirectory(self.parent,
+                                                    "Save contours to folder",
+                                                    self.currentDirectory)
+    if not directory:
+      qResult = qt.QMessageBox.warning(slicer.util.mainWindow(), "Save contours to folder",
+                                       "Folder not selected. Contours not saved.",
+                                       qt.QMessageBox.Ok, qt.QMessageBox.Ok)
+      return
+      
+    # Check to see if contour files already exist.
+    directoryContents = os.listdir(directory)
+    bPrompt = False
+    for study in self.studies:
+      filename = directory + os.sep + study.labelNode.GetName() + ".mha"
+      if filename in directoryContents:
+        bPrompt = True
+        break
+    postfix = ""
+    if bPrompt:
+      qResult = qt.QMessageBox.warning(slicer.util.mainWindow(), "Save contours to folder",
+                                       "One or more files exist. Overwrite?",
+                                       qt.QMessageBox.Yes | qt.QMessageBox.No, qt.QMessageBox.No)
+      if qResult == qt.QMessageBox.No:
+        intvals = []
+        for study in self.studies:
+          parts = study.labelNode.GetName().split("_label_")
+          if len(parts) == 1:
+            intval = 0
+          else:
+            try:
+              intval = int(parts[-1])
+            except ValueError:
+              intval = 0
+          intvals.append(intval)
+        maxval = max(intvals)
+        postfix = "_" + (str(maxval + 1))
+
     errorList = []
     for study in self.studies:
       if study.labelNode:
-        bOk = self.logic.saveVTKAsMHA(study.labelNode, self.currentDirectory)
+        filename = directory + os.sep + study.labelNode.GetName() + postfix + ".mha"
+        bOk = self.logic.saveVTKAsMHA(study.labelNode, filename)
         if not bOk:
-          errorList.append(study.labelNode.GetName())
+          errorList.append(filename)
       else:
-        errorList.append(study.labelNode.GetName())
+        errorList.append(filename)
     if len(errorList) > 0:
       qResult = qt.QMessageBox.error(slicer.util.mainWindow(), "Save contours",
                                      "Error saving {0}.".format("\n".join(errorList)),
                                      qt.QMessageBox.Ok, qt.QMessageBox.Ok)
     else:
       qResult = qt.QMessageBox.information(slicer.util.mainWindow(), "Save contours",
-                                           "Label maps saved to {0}".format(self.currentDirectory),
+                                           "Label maps saved to {0}".format(directory),
                                            qt.QMessageBox.Ok, qt.QMessageBox.Ok)
               
     
@@ -877,19 +951,19 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         
   def onSaveIslandsButtonToggled(self, checked):
     if checked:
-      self.removeObservers()
-      self.addObservers()
+      self.removeLeftButtonObservers()
+      self.addLeftButtonObservers()
       self.queryIslandsButton.checked = False
     else:
-      self.removeObservers()
+      self.removeLeftButtonObservers()
 
   def onQueryIslandsButtonToggled(self, checked):
     if checked:
-      self.removeObservers()
-      self.addObservers()
+      self.removeLeftButtonObservers()
+      self.addLeftButtonObservers()
       self.saveIslandsButton.checked = False
     else:
-      self.removeObservers()
+      self.removeLeftButtonObservers()
 
   def processEvent(self, caller=None, event=None):
     """
@@ -1076,25 +1150,20 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     return True
 
 
-  def sortVolumeNodes(self):
+  def sortVolumeNodes(self, retNodes=[]):
     """Sorts the volume nodes in the scene into study objects.
     Each study contains multiple series.
     """
-    
     studies = []
     if LONG_STUDY_FLAG:
-      # Get all w/o fat sat nodes (should be one per study).
-      woFSNodeDict = slicer.util.getNodes(pattern="*"+params.woFatSatSeriesNameTag)
-      nSeries = len(woFSNodeDict)
-      if nSeries == 0:
-        return studies
-      woFSNodeNames = sorted(woFSNodeDict.keys(), reverse=True)
-      
-      # Get all volume nodes associated with this pre-contrast volume. 
-      for name in woFSNodeNames:
-        parts = name.split("_")
-        accession_no = parts[params.imageFilenameParts.AccessionNumber]
-        study = self.getStudyVolumeNodesLongStudy(accession_no)
+      accessionNos = []
+      for retNode in retNodes:
+        parts = retNode[1].GetName().split("_")
+        accessionNos.append(parts[params.imageFilenameParts.AccessionNumber])
+      # Get unique accession numbers.
+      uniqueANos = sorted(list(set(accessionNos)), reverse=True)
+      for accessionNo in uniqueANos:
+        study = self.getStudyVolumeNodesLongStudy(accessionNo)
         if study:
           studies.append(study)
           
@@ -1199,7 +1268,6 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     prefix = ('_').join(parts[0:params.imageFilenameParts.SeriesID])
     study = CADStudy(patientId, studyDate, accessionNo)
 
-      
     # Find subtraction nodes.
     pattern = prefix + params.subtractionSeriesNameTag
     subtractionNodeDict = slicer.util.getNodes(pattern=pattern)
@@ -1221,13 +1289,6 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
 
     return study
 
-
-  def createNumpyArray (self, node):
-    # Generate Numpy Array from vtkMRMLScalarVolumeNode
-    imageData = vtk.vtkImageData()
-    imageData = node.GetImageData()
-    shapeData = list(imageData.GetDimensions())
-    return (vtk.util.numpy_support.vtk_to_numpy(imageData.GetPointData().GetScalars()).reshape(shapeData))
 
   def getSeriesIndex(self, volumeNodeName):
     # Returns the index of the volume series number in the volume node name
@@ -1621,8 +1682,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     cameraNodes.UnRegister(slicer.mrmlScene)
 
 
-  def saveVTKAsMHA(self, volumeNode, directory):
-    filename = directory + os.sep + volumeNode.GetName() + ".mha"
+  def saveVTKAsMHA(self, volumeNode, filename):
     return slicer.util.saveNode(volumeNode, filename)
     
 

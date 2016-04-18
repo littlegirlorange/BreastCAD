@@ -44,15 +44,7 @@ class DrawEffectOptions(LabelEffect.LabelEffectOptions):
   def create(self):
     super(DrawEffectOptions,self).create()
 
-    self.apply = qt.QPushButton("Apply", self.frame)
-    self.apply.objectName = self.__class__.__name__ + 'Apply'
-    self.apply.setToolTip("Apply current outline.\nUse the 'a' or 'Enter' hotkey to apply in slice window")
-    self.frame.layout().addWidget(self.apply)
-    self.widgets.append(self.apply)
-
-    HelpButton(self.frame, "Use this tool to draw an outline.\n\nLeft Click: add point.\nLeft Drag: add multiple points.\nx: delete last point.\na: apply outline.")
-
-    self.connections.append( (self.apply, 'clicked()', self.onApply) )
+    HelpButton(self.frame, "Use this tool to draw an outline.\n\nLeft Click: add point.\nLeft Drag: add multiple points.\nx: delete last point.\nRight Click or a: apply outline.")
 
     # Add vertical spacer
     self.frame.layout().addStretch(1)
@@ -243,11 +235,6 @@ class DrawEffectTool(LabelEffect.LabelEffectTool):
     self.logic.undoRedo = self.undoRedo
     self.logic.applyPolyMask(self.polyData)
     self.resetPolyData()
-    
-    volumeNode = self.sliceWidget.sliceLogic().GetBackgroundLayer().GetVolumeNode()
-    labelNode = self.sliceWidget.sliceLogic().GetLabelLayer().GetVolumeNode()
-    
-    
 
   def createPolyData(self):
     """make an empty single-polyline polydata"""

@@ -4,10 +4,11 @@ import vtkITK
 from fnmatch import fnmatch
 from slicer.ScriptedLoadableModule import *
 import logging
-import MyEditor
+import ConfigParser
+from MyEditorLib import MyEditor
 from MyEditorLib.EditUtil import EditUtil
-import TrackLesionsParams_LongitudinalStudy as params
-import LabelStatsLogic
+from TrackLesionsLib import TrackLesionsParams_LongitudinalStudy as params
+from MyEditorLib import LabelStatsLogic
 
 
 compareLayout = (
@@ -169,7 +170,7 @@ past2FourUpViewId = 504
 #
 
 LONG_STUDY_FLAG = True
-VOLUME_RENDER = False
+VOLUME_RENDER = True
 
 class TrackLesions(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
@@ -241,7 +242,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.patientFormWidget = qt.QWidget()
     patientFormLayout = qt.QFormLayout()
     self.patientFormWidget.setLayout(patientFormLayout)
-    self.tabWidget.addTab(self.patientFormWidget, "Patient")
+    self.tabWidget.addTab(self.patientFormWidget, "Load")
     
     # Patient selector
     self.openPatientButton = qt.QPushButton("Select Patient Folder")
@@ -323,19 +324,53 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.contourFormWidget.setLayout(contourFormLayout)
     self.contourFormWidget.setEnabled(False)
     self.tabWidget.addTab(self.contourFormWidget, "Contour")
+
+    # Current label
+    self.currentLabelFrame = qt.QGroupBox("Label volume(s)")
+    self.currentLabelFrame.setLayout(qt.QHBoxLayout())
+    self.currentLabelLabel = qt.QLabel("Current label volume:")
+    self.currentLabelFrame.layout().addWidget(self.currentLabelLabel)
+    self.currentLabelSelector = qt.QComboBox()
+    self.currentLabelFrame.layout().addWidget(self.currentLabelSelector)
+    contourFormLayout.addWidget(self.currentLabelFrame)
     
     # Edit tools
     self.editBoxFrame = qt.QFrame()
     self.editBoxFrame.objectName = 'EditBoxFrame'
     self.editBoxFrame.setLayout(qt.QVBoxLayout())
     self.editor = MyEditor.EditorWidget(self.contourFormWidget, False)
-    
+
+    #
+    # Save area
+    #
+    self.saveFormWidget = qt.QWidget()
+    saveFormLayout = qt.QVBoxLayout()
+    self.saveFormWidget.setLayout(saveFormLayout)
+    self.saveFormWidget.setEnabled(False)
+    self.tabWidget.addTab(self.saveFormWidget, "Save")
+
+    # Current label
+    self.saveLabelFrame = qt.QGroupBox("Label volume(s)")
+    self.saveLabelFrame.setLayout(qt.QVBoxLayout())
+    # model and view for stats table
+    self.labelTableView = qt.QTableView()
+    self.labelTableView.sortingEnabled = True
+    self.saveLabelFrame.layout().addWidget(self.labelTableView)
+    self.labelTableModel = qt.QStandardItemModel()
+    self.labelTableView.setModel(self.labelTableModel)
+    self.labelTableColHeaders = ["Label volume", "Modified", "Save", "Overwrite", "Save as"]
+    self.labelTableModel.setHorizontalHeaderLabels(self.labelTableColHeaders)
+    self.labelTableView.verticalHeader().visible = False
+    self.labelTableView.setMaximumHeight(200)
+    saveFormLayout.addWidget(self.saveLabelFrame)
+
     # Save contours button
     self.saveContoursButton = qt.QPushButton("Save Contours")
     self.saveContoursButton.toolTip = "Save contours as .mha label maps."
     self.saveContoursButton.enabled = True
-    contourFormLayout.addWidget(self.saveContoursButton)
-     
+    saveFormLayout.addWidget(self.saveContoursButton)
+    saveFormLayout.addStretch(1)
+
     #
     # Analysis Area - Disabled for longitudinal study.
     #
@@ -395,7 +430,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.initializeStats()    
     
     # Add vertical spacer
-    self.layout.addStretch(1)
+    #self.layout.addStretch(1)
   
     # Connections
     self.openPatientButton.connect("clicked()", self.onOpenPatient)
@@ -406,7 +441,10 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.past2ViewRadioButton.connect('clicked()', self.onViewSelected) 
     self.resetWindowingButton.connect('clicked()', self.onResetWindowing) 
     self.resetFovButton.connect('clicked()', self.resetFieldOfView) 
-    self.resetViewsButton.connect('clicked()', self.onResetViews) 
+    self.resetViewsButton.connect('clicked()', self.onResetViews)
+    self.tabWidget.connect('currentChanged(int)', self.onTabChanged)
+    self.currentLabelSelector.connect('currentIndexChanged(QString)', self.onLabelSelect)
+    self.labelTableView.connect("clicked(QModelIndex)", self.onLabelTableSelect)
     self.saveContoursButton.connect('clicked()', self.onSaveContours)     
     self.findIslandsButton.connect('clicked(bool)', self.onConvertMapToLabelButton)
     self.saveIslandsButton.connect('toggled(bool)', self.onSaveIslandsButtonToggled)
@@ -460,6 +498,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     
   
   def resetFieldOfView(self):
+    self.setLinkedControl()
     layoutManager = slicer.app.layoutManager()
     sliceLogic = layoutManager.sliceWidget("Current_Sub1").sliceLogic()
     sliceLogic.StartSliceNodeInteraction(8)  # vtkMRMLSliceNode::ResetFieldOfViewFlag
@@ -492,6 +531,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.tabWidget.setCurrentWidget(self.patientFormWidget)
     self.viewFormWidget.setEnabled(False)
     self.contourFormWidget.setEnabled(False)
+    self.currentLabelSelector.clear()
     
     # Reset editor.
     self.editor.resetInterface()
@@ -596,18 +636,47 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       sliceLogic = sliceLogics.GetItemAsObject(i)
       sliceCompositeNode = sliceLogic.GetSliceCompositeNode()
       sliceCompositeNode.SetLinkedControl(1)
-      
+
+  def getModifiedLabelNodes(self):
+    labelNodeDict = slicer.util.getNodes(pattern="*label*")
+    for name, node in labelNodeDict.iteritems():
+      if not node.GetModifiedSinceRead():
+        del labelNodeDict[name]
+    return labelNodeDict.values()
+
+    # postfixes = []
+    # for name in labelNodeDict.iterkeys():
+    #   parts = name.split("_label_")
+    #   if len(parts) == 1:
+    #     postfix = ""
+    #   else:
+    #     postfix = parts[-1]
+    #   postfixes.append(postfix)
+    # uniquePostfixes = list(set(postfixes))
+    # qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Close patient",
+    #                                   "The following label volumes have been modified: {0}\nSave before closing?",
+    #                                   qt.QMessageBox)
+
 
   def onOpenPatient(self):
     # Prompt to close current scene if data is currently loaded.
     if len(self.studies) > 0:
       qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Close patient", 
-                                        "Close the current patient?\nPress Cancel to continue working with this patient.", 
+                                        "Close the current patient?\nPress Cancel to continue working with this patient.",
                                         qt.QMessageBox.Ok | qt.QMessageBox.Cancel,
                                         qt.QMessageBox.Cancel)
       if qResult == qt.QMessageBox.Cancel:
         return
-              
+
+      modifiedLabelNodes = self.getModifiedLabelNodes()
+      if len(modifiedLabelNodes) > 0:
+        qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Close patient",
+                                          "Discard changes to label volumes?\nPress Cancel to continue working with this patient.",
+                                          qt.QMessageBox.Ok | qt.QMessageBox.Cancel,
+                                          qt.QMessageBox.Cancel)
+        if qResult == qt.QMessageBox.Cancel:
+          return
+
       slicer.mrmlScene.Clear(0)
       self.resetGuiPanel()
       self.clearParams()
@@ -622,12 +691,19 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       return
 
     retNodes = []
+    labelNodes = []
     for root, dirs, files in os.walk(dir):
       for file in files:
         if file.endswith(".mha"):
-          retNode = slicer.util.loadVolume(os.path.join(root, file), returnNode=True)
-          retNodes.append(retNode)
-    
+          if file.lower().find("label") > 0:
+            # Label volume.
+            retNode = slicer.util.loadLabelVolume(os.path.join(root, file), returnNode=True)[1]
+            labelNodes.append(retNode)
+          else:
+            # Image volume.
+            retNode = slicer.util.loadVolume(os.path.join(root, file), returnNode=True)[1]
+            retNodes.append(retNode)
+
     # Sort input data into separate studies.
     self.studies = self.logic.sortVolumeNodes(retNodes)
     if len(self.studies) == 0:
@@ -636,11 +712,28 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       # TODO: Disable processing buttons
       return
 
+    # if len(labelNodes) > 0:
+    #   msgBox = qt.QMessageBox(slicer.util.mainWindow())
+    #   msgBox.setWindowTitle("Select Patient Folder")
+    #   msgBox.setText("Label maps found.\nLoad existing or create new?")
+    #   loadExistingButton = msgBox.addButton("Load Existing", qt.QMessageBox.AcceptRole)
+    #   createNewButton = msgBox.addButton("Create New", qt.QMessageBox.AcceptRole)
+    #   msgBox.setDefaultButton(createNewButton)
+    #   msgBox.setIcon(qt.QMessageBox.question)
+    #   msgBox.show()
+    #   if msgBox.clickedButton() == loadExistingButton:
+    #     # Prompt for which label maps to edit.
+    #     postfixes = self.getLabelNodePostfixes()
+    #     postfix = qt.QInputDialog.getItem(slicer.util.mainWindow(),
+    #                                       "Select label maps", "Label map file name postfix:",
+    #                                       postfixes, len(postfixes), False)
+    #   elif msgBox.clickedButton() == createNewButton:
+    #     postfix = self.getNewLabelNodePostfix()
+
     # Set current directory for saving label volumes.
     diffNodeFilename = self.studies[0].diffNodes[0].GetStorageNode().GetFileName()
     self.currentDirectory = os.path.dirname(diffNodeFilename)    
     slicer.mrmlScene.SetRootDirectory(self.currentDirectory)
-    
     
     # Display patient info in main GUI panel.
     self.setPatientInfo()
@@ -665,7 +758,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
             intVal = 0
         intVals.append(intVal)
       overallMax = max(intVals)
-      postfix = "_" + str(overallMax + 1)
+      postfix = str(overallMax + 1)
     else:
       postfix = ""
     
@@ -687,7 +780,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         
       # Set up label nodes for lesion contouring.
       volumeNode = study.diffNodes[0]
-      labelNodeName = volumeNode.GetName() + "_label" + postfix
+      labelNodeName = volumeNode.GetName() + "_label" + (postfix if not postfix else ("_"+postfix))
       labelNode = slicer.modules.volumes.logic().CreateAndAddLabelVolume(slicer.mrmlScene, volumeNode, labelNodeName)
       colorNode = slicer.util.getNode('GenericColors')
       labelNode.GetDisplayNode().SetAndObserveColorNodeID(colorNode.GetID())
@@ -706,12 +799,20 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         self.attachStudyToVolumeWidget(study, self.timePoints[iStudy])
     
     self.editor.setLabelNodes(labelNodes)
+    postfixes = self.getLabelNodePostfixes()
+    index = postfixes.index(postfix)
+    self.currentLabelSelector.clear()
+    for postfix in postfixes:
+      self.currentLabelSelector.addItem("label" + (postfix if not postfix else ("_"+postfix)))
+    self.currentLabelSelector.setCurrentIndex(index)
+    self.populateLabelTable()
     
     self.resetFieldOfViewForTheFirstTime()
     
     # Enable view and contour features.
     self.viewFormWidget.setEnabled(True)
     self.contourFormWidget.setEnabled(True)
+    self.saveFormWidget.setEnabled(True)
       
     # Set slice selector.
     dims = self.studies[0].diffNodes[0].GetImageData().GetDimensions()
@@ -722,6 +823,101 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     # Enable lesion contouring.
     EditUtil.setLabel(1)
 
+  def populateLabelTable(self):
+    postfixes = self.getLabelNodePostfixes()
+    self.items = []
+    for iRow, postfix in enumerate(postfixes):
+      # Label volume name.
+      item = qt.QStandardItem()
+      labelName = "label"+(postfix if not postfix else ("_"+postfix))
+      item.setData(labelName, qt.Qt.DisplayRole)
+      item.setEditable(False)
+      self.labelTableModel.setItem(iRow, self.labelTableColHeaders.index("Label volume"), item)
+      self.items.append(item)
+      labelNodeDict = slicer.util.getNodes(pattern="*_label"+(postfix if not postfix else ("_"+postfix)))
+      bModified = False
+      checkState = 0  # Qt::Unchecked
+      node = labelNodeDict.values()[0]
+      storageNode = node.GetStorageNode()
+      for name, node in labelNodeDict.iteritems():
+        if node.GetModifiedSinceRead() and self.logic.hasLabels(node):
+          bModified = True
+          checkState = 2  # Qt::Checked
+          break
+      # Modified state.
+      item = qt.QStandardItem()
+      item.setEditable(False)
+      item.setCheckState(checkState)
+      self.labelTableModel.setItem(iRow, self.labelTableColHeaders.index("Modified"), item)
+      self.items.append(item)
+      # Save (checked if modified by default).
+      item = qt.QStandardItem()
+      item.setEditable(False)
+      item.setCheckable(bModified)
+      item.setCheckState(checkState)
+      self.labelTableModel.setItem(iRow, self.labelTableColHeaders.index("Save"), item)
+      self.items.append(item)
+      # Overwrite (checked if modified by default).
+      item = qt.QStandardItem()
+      item.setEditable(False)
+      item.setCheckable(bModified)
+      item.setCheckState(checkState)
+      self.labelTableModel.setItem(iRow, self.labelTableColHeaders.index("Overwrite"), item)
+      self.items.append(item)
+      # Save as (set to label volume name and disabled by default).
+      item = qt.QStandardItem()
+      item.setData(labelName, qt.Qt.DisplayRole)
+      item.setEnabled(False)
+      self.labelTableModel.setItem(iRow, self.labelTableColHeaders.index("Save as"), item)
+      self.items.append(item)
+    self.labelTableView.setModel(self.labelTableModel)
+    for iCol in range(len(self.labelTableColHeaders)):
+      self.labelTableView.resizeColumnToContents(iCol)
+
+
+  def getLabelNodePostfixes(self):
+    ''' Returns a reverse sorted list of unique label node postfixes attached to the scene.
+        A postfix is the version number following the "label" portion of the node name, e.g.:
+          <patId>_<dateX>_<accessionNoX>_<subY>_label_<postfix>
+    '''
+    uniquePostfixes = []
+    labelNodeDict = slicer.util.getNodes(pattern="*_label*")
+    nNodes = len(labelNodeDict)
+    if nNodes == 0:
+      return uniquePostfixes
+
+    # Get postfix and accession number for each label node.
+    allPostfixes = []
+    allAccessionNos = []
+    for name, node in labelNodeDict.iteritems():
+      parts = name.split("_")
+      accessionNo = parts[params.imageFilenameParts.AccessionNumber]
+      parts = name.split("_label_")
+      if len(parts) == 1:
+        # The basename is *_label
+        postfix = ""
+      else:
+        # The basename is *_label_<postfix>
+        postfix = str(parts[-1])
+      allPostfixes.append(postfix)
+      allAccessionNos.append(accessionNo)
+
+    # Make sure each study has a label node with each unique postfix.
+    uniquePostfixes = list(set(allPostfixes))
+    for uniquePostfix in uniquePostfixes:
+      # Get the accession nos. for each label node with the unique postfix.
+      accessionNos = []
+      for i, postfix in enumerate(allPostfixes):
+        if postfix == uniquePostfix:
+          accessionNos.append(allAccessionNos[i])
+
+      # Make sure all studies are accounted for.
+      for study in self.studies:
+        if study.accessionNo not in accessionNos:
+          uniquePostfixes.remove(uniquePostfix)
+          continue
+
+    return sorted(uniquePostfixes, reverse=True)
 
   def setSliceSelector(self, minVal=None, maxVal=None, value=None):
     # Update slice selector widget according to current image dimensions.
@@ -823,70 +1019,162 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.setSliceSelector(minVal=1, maxVal=maxSliceNo, value=curSliceNo)
     
     # Enable lesion contouring.
-    EditUtil.setLabel(1)   
-    
+    EditUtil.setLabel(1)
         
   #
   # Contouring methods
   #
+
+  def onLabelSelect(self, nodeNameFilter):
+    # Get currently selected label postfix.
+    labelNodeDict = slicer.util.getNodes(pattern="*"+nodeNameFilter)
+    if len(labelNodeDict) != len(self.studies):
+      logging.debug('onLabelSelect failed: incorrect number of label nodes')
+      return
+
+    # Set study label nodes.
+    accessionNos = []
+    for study in self.studies:
+      accessionNos.append(study.accessionNo)
+    for name, node in labelNodeDict.items():
+      parts = name.split("_")
+      accessionNo = parts[params.imageFilenameParts.AccessionNumber]
+      if accessionNo not in accessionNos:
+        logging.debug('onLabelSelect failed: label node accession no. {0} does not match loaded accession nos. {1}.'.format(name, ", ".join(accessionNos)))
+        return
+      index = accessionNos.index(accessionNo)
+      self.studies[index].labelNode = node
+
+    # Attach label nodes to slice widgets.
+    for i, study in enumerate(self.studies):
+      timePoint = self.timePoints[i]
+      for iDiffNode in range(len(study.diffNodes)):
+        widget = timePoint + "_" + self.sliceWidgetNames[iDiffNode]
+        self.updateSliceWidget(widget, "Label", study.labelNode.GetID())
+
+    # Attach label nodes to editor.
+    self.editor.setLabelNodes(labelNodeDict.values())
+
+  #
+  # Save methods
+  #
+  def onTabChanged(self, tabIndex):
+    if self.tabWidget.tabText(tabIndex) == "Save":
+      self.populateLabelTable()
+
+
+  def onLabelTableSelect(self, modelIndex):
+    ''' Change file overwrite settings based on whether or not the file is to be saved.
+    '''
+    if modelIndex.row() == -1:
+      return
+    if modelIndex.column() == self.labelTableColHeaders.index('Save'):
+      # Save state changed for a label volume.
+      saveItem = self.labelTableModel.itemFromIndex(modelIndex)
+      if not saveItem.isCheckable():
+        return
+      saveCheckState = saveItem.checkState()
+      overwriteItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Overwrite'))
+      saveAsItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Save as'))
+      # overwriteCheckState = overwriteItem.checkState()
+      if saveCheckState == 0:
+        overwriteItem.setEnabled(False)
+        saveAsItem.setEnabled(False)
+      else:
+        overwriteItem.setEnabled(True)
+        saveAsItem.setEnabled(False)
+    elif modelIndex.column() == self.labelTableColHeaders.index('Overwrite'):
+      # Can only check/uncheck this option if it is enabled (if save is checked).
+      labelNameItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Label volume'))
+      overwriteItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Overwrite'))
+      saveAsItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Save as'))
+      overwriteCheckState = overwriteItem.checkState()
+      if overwriteCheckState == 0:  # Unchecked = do not overwrite
+        # Enable Save as and set to a unique label name.
+        saveAsItem.setEnabled(True)
+        postfix = self.getUniqueLabelPostfix()
+        newLabelName = "label" + (postfix if not postfix else ("_"+postfix))
+        saveAsItem.setText(newLabelName)
+      elif overwriteCheckState == 2:  # Checked = overwrite
+        # Disable Save as and set to original name.
+        saveAsItem.setEnabled(False)
+        saveAsItem.setText(labelNameItem.text())
+
+
   def onSaveContours(self):
     # Prompt for folder to save to.
-    directory = qt.QFileDialog.getExistingDirectory(self.parent,
-                                                    "Save contours to folder",
-                                                    self.currentDirectory)
-    if not directory:
-      qResult = qt.QMessageBox.warning(slicer.util.mainWindow(), "Save contours to folder",
-                                       "Folder not selected. Contours not saved.",
-                                       qt.QMessageBox.Ok, qt.QMessageBox.Ok)
-      return
-      
-    # Check to see if contour files already exist.
-    directoryContents = os.listdir(directory)
-    bPrompt = False
-    for study in self.studies:
-      filename = directory + os.sep + study.labelNode.GetName() + ".mha"
-      if filename in directoryContents:
-        bPrompt = True
-        break
-    postfix = ""
-    if bPrompt:
-      qResult = qt.QMessageBox.warning(slicer.util.mainWindow(), "Save contours to folder",
-                                       "One or more files exist. Overwrite?",
-                                       qt.QMessageBox.Yes | qt.QMessageBox.No, qt.QMessageBox.No)
-      if qResult == qt.QMessageBox.No:
-        intvals = []
-        for study in self.studies:
-          parts = study.labelNode.GetName().split("_label_")
-          if len(parts) == 1:
-            intval = 0
-          else:
-            try:
-              intval = int(parts[-1])
-            except ValueError:
-              intval = 0
-          intvals.append(intval)
-        maxval = max(intvals)
-        postfix = "_" + (str(maxval + 1))
+    # directory = qt.QFileDialog.getExistingDirectory(self.parent,
+    #                                                 "Save contours to folder",
+    #                                                 self.currentDirectory)
+    # if not directory:
+    #   qResult = qt.QMessageBox.warning(slicer.util.mainWindow(), "Save contours to folder",
+    #                                    "Folder not selected. Contours not saved.",
+    #                                    qt.QMessageBox.Ok, qt.QMessageBox.Ok)
+    #   return
 
+    # Find label nodes selected to save in label table.
     errorList = []
-    for study in self.studies:
-      if study.labelNode:
-        filename = directory + os.sep + study.labelNode.GetName() + postfix + ".mha"
-        bOk = self.logic.saveVTKAsMHA(study.labelNode, filename)
-        if not bOk:
-          errorList.append(filename)
-      else:
-        errorList.append(filename)
+    savedList = []
+    nModified = 0
+    for iRow in range(self.labelTableModel.rowCount()):
+      bModified = self.labelTableModel.item(iRow, self.labelTableColHeaders.index("Modified")).checkState()
+      if bModified:
+        nModified += 1
+      bSave = self.labelTableModel.item(iRow, self.labelTableColHeaders.index("Save")).checkState()
+      if bSave:
+        # Get all label nodes with this postfix.
+        postfix = self.labelTableModel.item(iRow, self.labelTableColHeaders.index("Label volume")).text()
+        labelNodeDict = slicer.util.getNodes(pattern="*"+postfix)
+        bOverwrite = self.labelTableModel.item(iRow, self.labelTableColHeaders.index("Overwrite")).checkState()
+        for name, node in labelNodeDict.iteritems():
+          if bOverwrite:
+            filename = node.GetStorageNode().GetFileName()
+          else:
+            newPostfix = self.labelTableModel.item(iRow, self.labelTableColHeaders.index("Save as")).text()
+            origFilename = node.GetStorageNode().GetFileName()
+            path = self.currentDirectory()
+            filename = path + os.sep + filename.split("")
+            node.GetStorageNode().SetFileName(filename)
+          bOk = self.logic.saveVTKAsMHA(node, filename)
+          if not bOk:
+            errorList.append(filename)
+          savedList.append(filename)
+
+    if nModified == 0:
+      qResult = qt.QMessageBox.information(slicer.util.mainWindow(), "Save contours",
+                                           "Label volumes have not been modified.\nNothing saved.",
+                                           qt.QMessageBox.Ok, qt.QMessageBox.Ok)
+      return
+    if len(savedList) == 0:
+      qResult = qt.QMessageBox.information(slicer.util.mainWindow(), "Save contours",
+                                           "No label volumes selected for save.\nMake sure 'Save' is checked for the label volume(s) you wish to save.",
+                                           qt.QMessageBox.Ok, qt.QMessageBox.Ok)
+      return
     if len(errorList) > 0:
       qResult = qt.QMessageBox.error(slicer.util.mainWindow(), "Save contours",
-                                     "Error saving {0}.".format("\n".join(errorList)),
+                                     "Error saving \n{0}\n".format("\n".join(errorList)),
                                      qt.QMessageBox.Ok, qt.QMessageBox.Ok)
+
+    qResult = qt.QMessageBox.information(slicer.util.mainWindow(), "Save contours",
+                                         "Labels saved to\n{0}".format("\n".join(savedList)),
+                                         qt.QMessageBox.Ok, qt.QMessageBox.Ok)
+    self.populateLabelTable()
+
+
+  def getUniqueLabelPostfix(self):
+    """ Returns a unique postfix for a label node.
+        (Postfix only, no "label_").
+    """
+    postfixes = self.getLabelNodePostfixes()  # Postfixes only (no "label_")
+    if len(postfixes) == 1 and postfixes[0] == "":
+      newPostfix = str(1)
     else:
-      qResult = qt.QMessageBox.information(slicer.util.mainWindow(), "Save contours",
-                                           "Label maps saved to {0}".format(directory),
-                                           qt.QMessageBox.Ok, qt.QMessageBox.Ok)
-              
-    
+      intVals = [int(pf) for pf in postfixes if pf != ""]
+      maxVal = max(intVals)
+      newPostfix = str(maxVal + 1)
+    return newPostfix
+
+
   def editLabelNode(self, labelNode, volumeNode):
     EditUtil.setLabel(1)
     EditUtil.setCurrentEffect("DrawEffect")
@@ -1000,11 +1288,12 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       orientationString = sliceNode.GetOrientationString()
       rasIndex = orientations[orientationString]
       volNode = sliceLogic.GetBackgroundLayer().GetVolumeNode()
-      volNode.GetIJKToRASMatrix(ijkToRas)
-      posIjk = [0, 0, 0, 1]
-      posIjk[2-rasIndex] = iSlice
-      posRas = ijkToRas.MultiplyPoint(posIjk)
-      sliceLogic.SetSliceOffset(posRas[rasIndex])
+      if volNode:
+        volNode.GetIJKToRASMatrix(ijkToRas)
+        posIjk = [0, 0, 0, 1]
+        posIjk[2-rasIndex] = iSlice
+        posRas = ijkToRas.MultiplyPoint(posIjk)
+        sliceLogic.SetSliceOffset(posRas[rasIndex])
       
   def initializeLabelSummary(self):
     # Create table.
@@ -1158,7 +1447,7 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     if LONG_STUDY_FLAG:
       accessionNos = []
       for retNode in retNodes:
-        parts = retNode[1].GetName().split("_")
+        parts = retNode.GetName().split("_")
         accessionNos.append(parts[params.imageFilenameParts.AccessionNumber])
       # Get unique accession numbers.
       uniqueANos = sorted(list(set(accessionNos)), reverse=True)
@@ -1417,6 +1706,15 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
     if study.maskNode and study.diffNodes[0]:
       study.maskedDiffNode = self.generateMaskedNode(study.diffNodes[0], study.maskNode)
          
+
+  def hasLabels(self, labelNode):
+    accum = vtk.vtkImageAccumulate()
+    accum.SetInputConnection(labelNode.GetImageDataConnection())
+    accum.Update()
+    lo = max(int(accum.GetMin()[0]), 1)
+    hi = int(accum.GetMax()[0])
+    return hi != 0 and lo != 0
+
 
   def convertMapToLabel(self, lesionMapNode):
       

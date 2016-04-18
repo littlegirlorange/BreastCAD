@@ -137,11 +137,10 @@ class LabelSummaryWidget(qt.QWidget):
 
     # structures view
 
-    #self.structuresView = qt.QTableView()
     self.structuresView = qt.QTreeView()
     self.structuresView.objectName = 'StructuresView'
     self.structuresView.sortingEnabled = True
-    #self.structuresView.minimumHeight = 200
+    self.structuresView.minimumHeight = 200
     layout.addWidget(self.structuresView)
 
     # delete all structures button
@@ -367,7 +366,6 @@ class LabelSummaryWidget(qt.QWidget):
     """re-build the Structures frame
     - optional caller and event ignored (for use as vtk observer callback)
     """
-
     if slicer.mrmlScene.IsBatchProcessing():
       return
 
@@ -375,52 +373,39 @@ class LabelSummaryWidget(qt.QWidget):
     self.structures = qt.QStandardItemModel()
     self.structuresView.setModel(self.structures)
 
-#     # if no merge volume exists, disable everything - else enable
-#     merge = self.merge
-# 
-# #     self.addStructureButton.setDisabled(not merge)
-#     self.deleteStructuresButton.setDisabled(not merge)
-#     self.deleteSelectedStructureButton.setDisabled(not merge)
-#     if self.mergeValidCommand:
-#       # will be passed current
-#       self.mergeValidCommand(merge)
-# 
-#     if not merge:
-#       return
-
     i = 0
     for labelNode in self._labelNodes:
       colorNode = labelNode.GetDisplayNode().GetColorNode()
       lut = colorNode.GetLookupTable()
       structureData = self.buildStructureList(labelNode)
       labelNodeName = labelNode.GetName()
-      
+
       for iStruct, structure in enumerate(structureData):
         # structure = [labelIndex, labelName, firstSlice]
         labelIndex = colorNode.GetColorIndexByName(structure[0])
         labelColor = lut.GetTableValue(labelIndex)[0:3]
         color = qt.QColor()
         color.setRgb(labelColor[0]*255,labelColor[1]*255,labelColor[2]*255)
-        
-        # label index
-        item = qt.QStandardItem()
-        item.setEditable(False)
-        item.setText(labelIndex)
-        self.structures.setItem(i,0, item)
-  
-        # label color
-        item = qt.QStandardItem()
-        item.setEditable(False)
-        item.setData(color, 1)
-        self.structures.setItem(i, 1,  item)
 
-        # label node name
+        # Label volume name
         item = qt.QStandardItem()
         item.setEditable(False)
         item.setText(labelNodeName)
+        self.structures.setItem(i, 0, item)
+  
+        # Label value
+        item = qt.QStandardItem()
+        item.setEditable(False)
+        item.setText(labelIndex)
+        self.structures.setItem(i, 1, item)
+
+        # Label color
+        item = qt.QStandardItem()
+        item.setEditable(False)
+        item.setData(color, 1)
         self.structures.setItem(i, 2, item)
-        
-        # slice
+
+        # First slice
         item = qt.QStandardItem()
         item.setEditable(False)
         item.setText(structure[2])
@@ -428,14 +413,14 @@ class LabelSummaryWidget(qt.QWidget):
         
         i += 1
 
-    self.structures.setHeaderData(0,1,"Label")
-    self.structures.setHeaderData(1,1,"Color")
-    self.structures.setHeaderData(2,1,"Label Volume")
+    self.structures.setHeaderData(0,1,"Label volume")
+    self.structures.setHeaderData(1,1,"Label")
+    self.structures.setHeaderData(2,1,"Color")
     self.structures.setHeaderData(3,1,"Slice")
 
     self.structuresView.setModel(self.structures)
     for i in range(5):
-      self.structuresView.resizeColumnToContents(i)    
+      self.structuresView.resizeColumnToContents(i)
     self.structuresView.connect("activated(QModelIndex)", self.onStructureClicked)
     self.structuresView.setProperty('SH_ItemView_ActivateItemOnSingleClick', 1)
 
@@ -443,11 +428,81 @@ class LabelSummaryWidget(qt.QWidget):
     rows = self.structures.rowCount()
     for row in xrange(rows):
       self.structureLabelNames.append(self.structures.item(row,0).text())
+    self.structuresView.sortByColumn(0)
+
+
+  # # ---------------------------------------------------------------------------
+  # def updateStructures(self, caller=None, event=None):
+  #   """re-build the Structures frame
+  #   - optional caller and event ignored (for use as vtk observer callback)
+  #   """
+  #   if slicer.mrmlScene.IsBatchProcessing():
+  #     return
+  #
+  #   # reset to a fresh model
+  #   self.structures = qt.QStandardItemModel()
+  #   self.structuresView.setModel(self.structures)
+  #
+  #   i = 0
+  #   for labelNode in self._labelNodes:
+  #     colorNode = labelNode.GetDisplayNode().GetColorNode()
+  #     lut = colorNode.GetLookupTable()
+  #     structureData = self.buildStructureList(labelNode)
+  #     labelNodeName = labelNode.GetName()
+  #
+  #     for iStruct, structure in enumerate(structureData):
+  #       # structure = [labelIndex, labelName, firstSlice]
+  #       labelIndex = colorNode.GetColorIndexByName(structure[0])
+  #       labelColor = lut.GetTableValue(labelIndex)[0:3]
+  #       color = qt.QColor()
+  #       color.setRgb(labelColor[0] * 255, labelColor[1] * 255, labelColor[2] * 255)
+  #
+  #       # Label volume name
+  #       item = qt.QStandardItem()
+  #       item.setEditable(False)
+  #       item.setText(labelNodeName)
+  #       self.structures.setItem(i, 0, item)
+  #
+  #       # Label value
+  #       item = qt.QStandardItem()
+  #       item.setEditable(False)
+  #       item.setText(labelIndex)
+  #       self.structures.setItem(i, 1, item)
+  #
+  #       # Label color
+  #       item = qt.QStandardItem()
+  #       item.setEditable(False)
+  #       item.setData(color, 1)
+  #       self.structures.setItem(i, 2, item)
+  #
+  #       # First slice
+  #       item = qt.QStandardItem()
+  #       item.setEditable(False)
+  #       item.setText(structure[2])
+  #       self.structures.setItem(i, 3, item)
+  #
+  #       i += 1
+  #
+  #   self.structures.setHeaderData(0, 1, "Label volume")
+  #   self.structures.setHeaderData(1, 1, "Label")
+  #   self.structures.setHeaderData(2, 1, "Color")
+  #   self.structures.setHeaderData(3, 1, "Slice")
+  #
+  #   self.structuresView.setModel(self.structures)
+  #   for i in range(5):
+  #     self.structuresView.resizeColumnToContents(i)
+  #   self.structuresView.connect("activated(QModelIndex)", self.onStructureClicked)
+  #   self.structuresView.setProperty('SH_ItemView_ActivateItemOnSingleClick', 1)
+  #
+  #   self.structureLabelNames = []
+  #   rows = self.structures.rowCount()
+  #   for row in xrange(rows):
+  #     self.structureLabelNames.append(self.structures.item(row, 0).text())
 
   #---------------------------------------------------------------------------
   def onStructureClicked(self, modelIndex):
     if modelIndex.row() != -1:
-      self.edit(int(self.structures.item(modelIndex.row(),0).text()))
+      self.edit(int(self.structures.item(modelIndex.row(), 1).text()))
       self.jumpSlices = True
       if self.jumpSlices:
         slice = int(self.structures.item(modelIndex.row(), 3).text())

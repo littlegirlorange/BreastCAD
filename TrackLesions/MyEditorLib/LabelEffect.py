@@ -39,7 +39,7 @@ class LabelEffectOptions(Effect.EffectOptions):
   def __init__(self, parent=0):
     super(LabelEffectOptions,self).__init__(parent)
     self.usesPaintOver = True
-    self.usesThreshold = True
+    self.usesThreshold = False
 
   def __del__(self):
     super(LabelEffectOptions,self).__del__()
@@ -60,6 +60,30 @@ class LabelEffectOptions(Effect.EffectOptions):
     self.thresholdLabel.setToolTip("In threshold mode, the label will only be set if the background value is within this range.")
     self.frame.layout().addWidget(self.thresholdLabel)
     self.widgets.append(self.thresholdLabel)
+
+    self.bkgdSelectorFrame = qt.QFrame(self.parent)
+    self.bkgdSelectorFrame.objectName = 'BackgroundVolumeFrame'
+    self.bkgdSelectorFrame.setLayout(qt.QHBoxLayout())
+    self.frame.layout().addWidget(self.bkgdSelectorFrame)
+
+    self.bkgdSelectorLabel = qt.QLabel("Grayscale Volume: ", self.bkgdSelectorFrame)
+    self.bkgdSelectorLabel.setToolTip("Select the view to threshold.")
+    self.bkgdSelectorFrame.layout().addWidget(self.bkgdSelectorLabel)
+
+    self.bkgdSelector = slicer.qMRMLNodeComboBox(self.bkgdSelectorFrame)
+    self.bkgdSelector.objectName = 'BackgroundVolumeNodeSelector'
+    # TODO
+    self.bkgdSelector.nodeTypes = ["vtkMRMLSliceNode"]
+    self.bkgdSelector.selectNodeUponCreation = False
+    self.bkgdSelector.addEnabled = False
+    self.bkgdSelector.removeEnabled = False
+    self.bkgdSelector.noneEnabled = True
+    self.bkgdSelector.showHidden = True
+    self.bkgdSelector.showChildNodeTypes = False
+    self.bkgdSelector.setMRMLScene(slicer.mrmlScene)
+    self.bkgdSelector.setToolTip("Select the view to threshold.")
+    self.bkgdSelectorFrame.layout().addWidget(self.bkgdSelector)
+
     self.threshold = ctk.ctkRangeWidget(self.frame)
     self.threshold.spinBoxAlignment = 0xff # put enties on top
     self.threshold.singleStep = 0.01
@@ -72,11 +96,14 @@ class LabelEffectOptions(Effect.EffectOptions):
     if not self.usesThreshold:
       self.thresholdPaint.hide()
       self.thresholdLabel.hide()
+      self.bkgdSelectorLabel.hide()
+      self.bkgdSelector.hide()
       self.threshold.hide()
 
-    self.connections.append( (self.paintOver, "clicked()", self.updateMRMLFromGUI ) )
-    self.connections.append( (self.thresholdPaint, "clicked()", self.updateMRMLFromGUI ) )
-    self.connections.append( (self.threshold, "valuesChanged(double,double)", self.onThresholdValuesChange ) )
+    self.connections.append((self.paintOver, "clicked()", self.updateMRMLFromGUI))
+    self.connections.append((self.thresholdPaint, "clicked()", self.updateMRMLFromGUI))
+    self.connections.append((self.bkgdSelector, "currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI))
+    self.connections.append((self.threshold, "valuesChanged(double,double)", self.onThresholdValuesChange))
 
   def destroy(self):
     super(LabelEffectOptions,self).destroy()
@@ -96,6 +123,7 @@ class LabelEffectOptions(Effect.EffectOptions):
     defaults = (
       ("paintOver", "1"),
       ("paintThreshold", "0"),
+      ("paintSliceNodeID", "C_1"),
       ("paintThresholdMin", "0"),
       ("paintThresholdMax", "1000"),
     )
@@ -111,7 +139,7 @@ class LabelEffectOptions(Effect.EffectOptions):
     # then, call superclass
     # then, update yourself from MRML parameter node
     # - follow pattern in EditOptions leaf classes
-    params = ("paintOver", "paintThreshold", "paintThresholdMin", "paintThresholdMax")
+    params = ("paintOver", "paintThreshold", "paintSliceNodeID", "paintThresholdMin", "paintThresholdMax")
     for p in params:
       if self.parameterNode.GetParameter("LabelEffect,"+p) == '':
         # don't update if the parameter node has not got all values yet
@@ -122,6 +150,8 @@ class LabelEffectOptions(Effect.EffectOptions):
                 int(self.parameterNode.GetParameter("LabelEffect,paintOver")) )
     self.thresholdPaint.setChecked(
                 int(self.parameterNode.GetParameter("LabelEffect,paintThreshold")) )
+    self.bkgdSelector.setCurrentNodeID(
+                str(self.parameterNode.GetParameter("LabelEffect,paintSliceNodeID")) )
     self.threshold.setMinimumValue(
                 float(self.parameterNode.GetParameter("LabelEffect,paintThresholdMin")) )
     self.threshold.setMaximumValue(
@@ -146,6 +176,8 @@ class LabelEffectOptions(Effect.EffectOptions):
       self.parameterNode.SetParameter( "LabelEffect,paintThreshold", "1" )
     else:
       self.parameterNode.SetParameter( "LabelEffect,paintThreshold", "0" )
+    self.parameterNode.SetParameter(
+                "LabelEffect,paintSliceNodeID", str(self.bkgdSelector.currentNodeID))
     self.parameterNode.SetParameter(
                 "LabelEffect,paintThresholdMin", str(self.threshold.minimumValue) )
     self.parameterNode.SetParameter(

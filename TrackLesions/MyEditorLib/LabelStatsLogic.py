@@ -1,5 +1,4 @@
 import vtk, qt, ctk, slicer
-import string
 
 HAVE_SIMPLEITK=True
 try:

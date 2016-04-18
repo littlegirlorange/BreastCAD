@@ -10,6 +10,8 @@ from EditOptions import *
 from HelperBox import *
 from LabelSummaryWidget import *
 from LabelEffect import LabelEffectOptions, LabelEffectTool, LabelEffectLogic
+from LabelStatsLogic import *
+from MyEditor import *
 
 # Built-in effects
 from PaintEffect import *

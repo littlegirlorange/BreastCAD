@@ -40,19 +40,11 @@ class PaintEffectOptions(LabelEffect.LabelEffectOptions):
 
   def __init__(self, parent=0):
 
-    # get pixel-size-dependent parameters
-    # calculate this before calling superclass init
-    # so it can be used to set mrml defaults if needed
-    labelVolume = EditUtil.getLabelVolume()
-    if labelVolume and labelVolume.GetImageData():
-      spacing = labelVolume.GetSpacing()
-      dimensions = labelVolume.GetImageData().GetDimensions()
-      self.minimumRadius = 0.5 * min(spacing)
-      bounds = [a*b for a,b in zip(spacing,dimensions)]
-      self.maximumRadius = 0.5 * max(bounds)
-    else:
-      self.minimumRadius = 0.01
-      self.maximumRadius = 100
+    # Since MyEditor does not define the current label volume like the original Editor,
+    # we cannot retrieve the pixel dimensions ahead of time. So, unfortunately, we have
+    # to hard code the min and max radius values.
+    self.minimumRadius = 0.1
+    self.maximumRadius = 100
 
     super(PaintEffectOptions,self).__init__(parent)
 
@@ -92,12 +84,6 @@ class PaintEffectOptions(LabelEffect.LabelEffectOptions):
       self.radiusSpinBox.decimals = -decimals + 2
     self.radiusFrame.layout().addWidget(self.radiusSpinBox)
     self.widgets.append(self.radiusSpinBox)
-    self.radiusUnitsToggle = qt.QPushButton("px:")
-    self.radiusUnitsToggle.objectName = 'PushButton_RadiusUnitsToggle'
-    self.radiusUnitsToggle.setToolTip("Toggle radius quick set buttons between mm and label volume pixel size units")
-    self.radiusUnitsToggle.setFixedWidth(35)
-    self.radiusFrame.layout().addWidget(self.radiusUnitsToggle)
-    self.radiusUnitsToggle.connect('clicked()',self.onRadiusUnitsToggle)
     self.radiusQuickies = {}
     quickies = ( (2, self.onQuickie2Clicked), (3,self.onQuickie3Clicked),
                  (4, self.onQuickie4Clicked), (5, self.onQuickie5Clicked),
@@ -212,11 +198,6 @@ class PaintEffectOptions(LabelEffect.LabelEffectOptions):
       tool.createGlyph(tool.brush)
     self.connectWidgets()
 
-  def onRadiusUnitsToggle(self):
-    if self.radiusUnitsToggle.text == 'mm:':
-      self.radiusUnitsToggle.text = 'px:'
-    else:
-      self.radiusUnitsToggle.text = 'mm:'
   def onQuickie2Clicked(self):
     self.setQuickieRadius(2)
   def onQuickie3Clicked(self):
@@ -230,27 +211,12 @@ class PaintEffectOptions(LabelEffect.LabelEffectOptions):
   def onQuickie20Clicked(self):
     self.setQuickieRadius(20)
 
-  def setQuickieRadius(self,radius):
-    labelVolume = EditUtil.getLabelVolume()
-    if labelVolume:
-      if self.radiusUnitsToggle.text == 'px:':
-        spacing = labelVolume.GetSpacing()
-        if self.radiusPixelMode == 'diag':
-          from math import sqrt
-          diag = sqrt(reduce(lambda x,y:x+y, map(lambda x: x**2, spacing)))
-          mmRadius = diag * radius
-        elif self.radiusPixelMode == 'min':
-          mmRadius = min(spacing) * radius
-        else:
-          print (self,"Unknown pixel mode - using 5mm")
-          mmRadius = 5
-      else:
-        mmRadius = radius
-      self.disconnectWidgets()
-      self.radiusSpinBox.setValue(mmRadius)
-      self.radius.setValue(mmRadius)
-      self.connectWidgets()
-      self.updateMRMLFromGUI()
+  def setQuickieRadius(self, radius):
+    self.disconnectWidgets()
+    self.radiusSpinBox.setValue(radius)
+    self.radius.setValue(radius)
+    self.connectWidgets()
+    self.updateMRMLFromGUI()
 
   def onRadiusValueChanged(self,value):
     self.radiusSpinBox.setValue(self.radius.value)

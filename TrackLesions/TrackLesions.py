@@ -1059,7 +1059,11 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   # Save methods
   #
   def onTabChanged(self, tabIndex):
+    if self.tabWidget.tabText(tabIndex) != "Contour":
+      # Stop contouring (set tool to Default) if we're switched out of the Contour tab.
+      self.editor.resetInterface()
     if self.tabWidget.tabText(tabIndex) == "Save":
+      # Recalculate which label volumes need saving and display.
       self.populateLabelTable()
 
 

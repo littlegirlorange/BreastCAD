@@ -4,9 +4,10 @@ import vtkITK
 from fnmatch import fnmatch
 from slicer.ScriptedLoadableModule import *
 import logging
-import ConfigParser
+#import ConfigParser
 from MyEditorLib import MyEditor
 from MyEditorLib.EditUtil import EditUtil
+#from MyEditorLib.EditOptions import HelpButton
 from TrackLesionsLib import TrackLesionsParams_LongitudinalStudy as params
 from MyEditorLib import LabelStatsLogic
 
@@ -250,7 +251,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     patientFormLayout.addRow(self.openPatientButton)
     
     # Patient info
-    self.patientLayoutBox = qt.QGroupBox("Patient info")
+    self.patientLayoutBox = qt.QGroupBox("Patient Info")
     self.patientLayoutBox.setLayout(qt.QFormLayout())    
     self.patientIdLabel = qt.QLabel()
     self.patientIdLabel.setText("<Select patient>")
@@ -276,18 +277,30 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.compareViewRadioButton = qt.QRadioButton()
     self.viewRadioBox.layout().addWidget(self.compareViewRadioButton)    
     self.compareViewRadioButton.text = "Compare"
+    self.compareViewRadioButton.setToolTip("Display the first subtraction series for each study.")
     self.currentViewRadioButton = qt.QRadioButton()
     self.viewRadioBox.layout().addWidget(self.currentViewRadioButton)
     self.currentViewRadioButton.text = "Current"
+    self.currentViewRadioButton.setToolTip("Display dynamic subtraction images for the most recent study.")
     self.past1ViewRadioButton = qt.QRadioButton()
     self.viewRadioBox.layout().addWidget(self.past1ViewRadioButton)
     self.past1ViewRadioButton.text = "Past1"
+    self.past1ViewRadioButton.setToolTip("Display dynamic subtraction images for the first prior study.")
     self.past2ViewRadioButton = qt.QRadioButton()
     self.viewRadioBox.layout().addWidget(self.past2ViewRadioButton)
-    self.past2ViewRadioButton.text = "Past2"     
+    self.past2ViewRadioButton.text = "Past2"
+    self.past2ViewRadioButton.setToolTip("Display dynamic subtraction images for the second prior study.")
     self.compareViewRadioButton.checked = True
     viewFormLayout.addRow(self.viewRadioBox)
-        
+
+    # Navigate group box
+    self.navigateFrame = qt.QGroupBox("Navigate")
+    self.navigateFrame.setLayout(qt.QFormLayout())
+    viewFormLayout.addRow(self.navigateFrame)
+    instructions = qt.QLabel("Middle Scroll: scroll slices\n"
+                             "Right Drag Up/Down: zoom out/in")
+    self.navigateFrame.layout().addRow(instructions)
+
     # Slice selector
     self.inputSliceLabel = qt.QLabel("Jump to slice:")
     self.inputSliceLabel.setToolTip("Navigate sagittal views to the selected slice.")
@@ -297,31 +310,51 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.inputSliceSelector.maximum = (0)
     self.inputSliceSelector.value = (0)
     self.inputSliceSelector.setToolTip("Navigate sagittal views to the selected slice.")
-    viewFormLayout.addRow(self.inputSliceLabel, self.inputSliceSelector)
-    
-    # Reset windowing button
-    self.resetWindowingButton = qt.QPushButton("Reset Windowing")
-    self.resetWindowingButton.toolTip = "Reset windowing of subtraction images to default values."
-    self.resetWindowingButton.enabled = True
-    viewFormLayout.addRow(self.resetWindowingButton)
+    self.navigateFrame.layout().addRow(self.inputSliceLabel, self.inputSliceSelector)
 
     # Reset FOV (slice) button
     self.resetSliceFovButton = qt.QPushButton("Reset Slice Field of View")
     self.resetSliceFovButton.toolTip = "Re-center current slice and fit to field of view."
     self.resetSliceFovButton.enabled = True
-    viewFormLayout.addRow(self.resetSliceFovButton)
+    self.navigateFrame.layout().addRow(self.resetSliceFovButton)
 
     # Reset FOV button
     self.resetFovButton = qt.QPushButton("Reset Volume Field of View")
     self.resetFovButton.toolTip = "Re-center volume and fit to field of view."
     self.resetFovButton.enabled = True
-    viewFormLayout.addRow(self.resetFovButton)
-    
+    self.navigateFrame.layout().addRow(self.resetFovButton)
+
+    #HelpButton(self.navigateFrame, "Middle Scroll: scroll slices\nRight Drag Up/Down: zoom out/in")
+
+    # Window/Level group box
+    self.windowingFrame = qt.QGroupBox("Window/Level")
+    self.windowingFrame.setLayout(qt.QFormLayout())
+    viewFormLayout.addRow(self.windowingFrame)
+    instructions = qt.QLabel("Left Drag Left/Right: window\n"
+                             "Left Drag Up/Down: level")
+    self.windowingFrame.layout().addRow(instructions)
+
+    # Reset windowing button
+    self.resetWindowingButton = qt.QPushButton("Reset Windowing")
+    self.resetWindowingButton.toolTip = "Reset windowing of subtraction images to default values."
+    self.resetWindowingButton.enabled = True
+    self.windowingFrame.layout().addRow(self.resetWindowingButton)
+
+    #HelpButton(self.windowingFrame, "Left Drag Left/Right: window\nLeft Drag Up/Down: level")
+
+    # Uh Oh group box
+    self.uhohFrame = qt.QGroupBox("Uh Oh")
+    self.uhohFrame.setLayout(qt.QFormLayout())
+    viewFormLayout.addRow(self.uhohFrame)
+
     # Reset views button
     self.resetViewsButton = qt.QPushButton("Reset Data in Views")
-    self.resetViewsButton.toolTip = "Load default volumes in views."
+    self.resetViewsButton.toolTip = "Load default images and labels in views. " \
+                                    "Recenters and resynchronizes views. " \
+                                    "Use this if your volumes/studies are" \
+                                    "loaded in the wrong windows."
     self.resetViewsButton.enabled = True
-    viewFormLayout.addRow(self.resetViewsButton)
+    self.uhohFrame.layout().addRow(self.resetViewsButton)
              
     #
     # Contour area
@@ -333,7 +366,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.tabWidget.addTab(self.contourFormWidget, "Contour")
 
     # Current label
-    self.currentLabelFrame = qt.QGroupBox("Label volume(s)")
+    self.currentLabelFrame = qt.QGroupBox("Label Volume(s)")
     self.currentLabelFrame.setLayout(qt.QHBoxLayout())
     self.currentLabelLabel = qt.QLabel("Current label volume:")
     self.currentLabelFrame.layout().addWidget(self.currentLabelLabel)
@@ -357,7 +390,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.tabWidget.addTab(self.saveFormWidget, "Save")
 
     # Current label
-    self.saveLabelFrame = qt.QGroupBox("Label volume(s)")
+    self.saveLabelFrame = qt.QGroupBox("Label Volume(s)")
     self.saveLabelFrame.setLayout(qt.QVBoxLayout())
     # model and view for stats table
     self.labelTableView = qt.QTableView()
@@ -365,7 +398,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.saveLabelFrame.layout().addWidget(self.labelTableView)
     self.labelTableModel = qt.QStandardItemModel()
     self.labelTableView.setModel(self.labelTableModel)
-    self.labelTableColHeaders = ["Label volume", "Modified", "Save", "Overwrite", "Save as"]
+    self.labelTableColHeaders = ["Label Volume", "Modified", "Save", "Overwrite", "Save as"]
     self.labelTableModel.setHorizontalHeaderLabels(self.labelTableColHeaders)
     self.labelTableView.verticalHeader().visible = False
     self.labelTableView.setMaximumHeight(200)
@@ -843,7 +876,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       labelName = "label"+(postfix if not postfix else ("_"+postfix))
       item.setData(labelName, qt.Qt.DisplayRole)
       item.setEditable(False)
-      self.labelTableModel.setItem(iRow, self.labelTableColHeaders.index("Label volume"), item)
+      self.labelTableModel.setItem(iRow, self.labelTableColHeaders.index("Label Volume"), item)
       self.items.append(item)
       labelNodeDict = slicer.util.getNodes(pattern="*_label"+(postfix if not postfix else ("_"+postfix)))
       bModified = False
@@ -1101,7 +1134,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         saveAsItem.setEnabled(False)
     elif modelIndex.column() == self.labelTableColHeaders.index('Overwrite'):
       # Can only check/uncheck this option if it is enabled (if save is checked).
-      labelNameItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Label volume'))
+      labelNameItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Label Volume'))
       overwriteItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Overwrite'))
       saveAsItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Save as'))
       overwriteCheckState = overwriteItem.checkState()
@@ -1139,7 +1172,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       bSave = self.labelTableModel.item(iRow, self.labelTableColHeaders.index("Save")).checkState()
       if bSave:
         # Get all label nodes with this postfix.
-        postfix = self.labelTableModel.item(iRow, self.labelTableColHeaders.index("Label volume")).text()
+        postfix = self.labelTableModel.item(iRow, self.labelTableColHeaders.index("Label Volume")).text()
         labelNodeDict = slicer.util.getNodes(pattern="*"+postfix)
         bOverwrite = self.labelTableModel.item(iRow, self.labelTableColHeaders.index("Overwrite")).checkState()
         for name, node in labelNodeDict.iteritems():

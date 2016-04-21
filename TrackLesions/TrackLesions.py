@@ -170,7 +170,7 @@ past2FourUpViewId = 504
 #
 
 LONG_STUDY_FLAG = True
-VOLUME_RENDER = True
+VOLUME_RENDER = False
 
 class TrackLesions(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
@@ -209,6 +209,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.studies = []
     self.currentDirectory = ""
     self.logic = TrackLesionsLogic()
+    self.bIgnoreSliceNodeEvents = False
         
     # Instantiate and connect widgets ...
     
@@ -292,9 +293,9 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.inputSliceLabel.setToolTip("Navigate sagittal views to the selected slice.")
     self.inputSliceSelector = qt.QSpinBox()
     self.inputSliceSelector.singleStep = (1)
-    self.inputSliceSelector.minimum = (1)
-    self.inputSliceSelector.maximum = (1)
-    self.inputSliceSelector.value = (1)
+    self.inputSliceSelector.minimum = (0)
+    self.inputSliceSelector.maximum = (0)
+    self.inputSliceSelector.value = (0)
     self.inputSliceSelector.setToolTip("Navigate sagittal views to the selected slice.")
     viewFormLayout.addRow(self.inputSliceLabel, self.inputSliceSelector)
     
@@ -303,10 +304,16 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.resetWindowingButton.toolTip = "Reset windowing of subtraction images to default values."
     self.resetWindowingButton.enabled = True
     viewFormLayout.addRow(self.resetWindowingButton)
-         
+
+    # Reset FOV (slice) button
+    self.resetSliceFovButton = qt.QPushButton("Reset Slice Field of View")
+    self.resetSliceFovButton.toolTip = "Re-center current slice and fit to field of view."
+    self.resetSliceFovButton.enabled = True
+    viewFormLayout.addRow(self.resetSliceFovButton)
+
     # Reset FOV button
-    self.resetFovButton = qt.QPushButton("Reset Field of View")
-    self.resetFovButton.toolTip = "Re-center images and fit to field of view."
+    self.resetFovButton = qt.QPushButton("Reset Volume Field of View")
+    self.resetFovButton.toolTip = "Re-center volume and fit to field of view."
     self.resetFovButton.enabled = True
     viewFormLayout.addRow(self.resetFovButton)
     
@@ -439,8 +446,9 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.currentViewRadioButton.connect('clicked()', self.onViewSelected)
     self.past1ViewRadioButton.connect('clicked()', self.onViewSelected)
     self.past2ViewRadioButton.connect('clicked()', self.onViewSelected) 
-    self.resetWindowingButton.connect('clicked()', self.onResetWindowing) 
-    self.resetFovButton.connect('clicked()', self.resetFieldOfView) 
+    self.resetWindowingButton.connect('clicked()', self.onResetWindowing)
+    self.resetSliceFovButton.connect('clicked()', self.resetSliceFieldOfView)
+    self.resetFovButton.connect('clicked()', self.resetFieldOfView)
     self.resetViewsButton.connect('clicked()', self.onResetViews)
     self.tabWidget.connect('currentChanged(int)', self.onTabChanged)
     self.currentLabelSelector.connect('currentIndexChanged(QString)', self.onLabelSelect)
@@ -450,6 +458,14 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.saveIslandsButton.connect('toggled(bool)', self.onSaveIslandsButtonToggled)
     self.queryIslandsButton.connect('toggled(bool)', self.onQueryIslandsButtonToggled)    
     self.Button.connect('clicked(bool)', self.onButton)
+
+    self.sliceNodeTags = []
+    sliceNodeNames = self.getSliceWidgets("*", "Sagittal")
+    for name in sliceNodeNames:
+      sliceLogic = slicer.app.layoutManager().sliceWidget(name).sliceLogic()
+      sliceNode = sliceLogic.GetSliceNode()
+      tag = sliceNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.sliceNodeEvent, 1.0)
+      self.sliceNodeTags.append([sliceNode, tag])
       
   def removeLeftButtonObservers(self):
     # Remove observers and reset
@@ -474,10 +490,36 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.studies = []
     self.currentDirectory = ""
 
+
   def cleanup(self):
+    for sliceNode, tag in self.sliceNodeTags:
+      sliceNode.RemoveObserver(tag)
     self.removeLeftButtonObservers()
     self.clearParams()
-    
+
+  def resetSliceFieldOfView(self):
+    self.setLinkedControl()
+    layoutManager = slicer.app.layoutManager()
+    sliceLogic = layoutManager.sliceWidget("Current_Sub1").sliceLogic()
+    sliceNode = sliceLogic.GetSliceNode()
+    winDims = sliceNode.GetDimensions()
+    whRatio = float(winDims[0])/winDims[1]
+    imgDims = [0, 0, 0]
+    imgCenter = [0, 0, 0]
+    sliceLogic.GetBackgroundSliceDimensions(imgDims, imgCenter)
+    currentFov = sliceNode.GetFieldOfView()
+    sliceLogic.StartSliceNodeInteraction(34)  # vtkMRMLSliceNode::FieldOfViewFlag=2 and XYZOriginFlag=32
+    if whRatio < 1.0:
+      # width < height --> fit img width to slice node width
+      sliceNode.SetFieldOfView(imgDims[0], imgDims[1]/whRatio, currentFov[2])
+    else:
+      # width > height --> fit img height to slice node height
+      sliceNode.SetFieldOfView(imgDims[0]*whRatio, imgDims[1], currentFov[2])
+    offset = sliceNode.GetSliceOffset()
+    sliceNode.SetXYZOrigin(0.0, 0.0, offset)
+    sliceNode.UpdateMatrices()
+    sliceLogic.EndSliceNodeInteraction()
+
   def resetFieldOfViewForTheFirstTime(self):
     # Have to display each layout using processEvents() in order for each
     # slice node to be created and know its true size. This flickers and is slow,
@@ -525,7 +567,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Set view to current.
     self.compareViewRadioButton.checked = True
-    self.setSliceSelector(minVal=1, maxVal=1, value=1)    
+    self.setSliceSelector(minVal=0, maxVal=0, value=0)
     
     # Set patient tab to current and disable view and contour.
     self.tabWidget.setCurrentWidget(self.patientFormWidget)
@@ -644,19 +686,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         del labelNodeDict[name]
     return labelNodeDict.values()
 
-    # postfixes = []
-    # for name in labelNodeDict.iterkeys():
-    #   parts = name.split("_label_")
-    #   if len(parts) == 1:
-    #     postfix = ""
-    #   else:
-    #     postfix = parts[-1]
-    #   postfixes.append(postfix)
-    # uniquePostfixes = list(set(postfixes))
-    # qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Close patient",
-    #                                   "The following label volumes have been modified: {0}\nSave before closing?",
-    #                                   qt.QMessageBox)
-
 
   def onOpenPatient(self):
     # Prompt to close current scene if data is currently loaded.
@@ -711,24 +740,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
                              "Incomplete patient folder. \nUnable to process.")
       # TODO: Disable processing buttons
       return
-
-    # if len(labelNodes) > 0:
-    #   msgBox = qt.QMessageBox(slicer.util.mainWindow())
-    #   msgBox.setWindowTitle("Select Patient Folder")
-    #   msgBox.setText("Label maps found.\nLoad existing or create new?")
-    #   loadExistingButton = msgBox.addButton("Load Existing", qt.QMessageBox.AcceptRole)
-    #   createNewButton = msgBox.addButton("Create New", qt.QMessageBox.AcceptRole)
-    #   msgBox.setDefaultButton(createNewButton)
-    #   msgBox.setIcon(qt.QMessageBox.question)
-    #   msgBox.show()
-    #   if msgBox.clickedButton() == loadExistingButton:
-    #     # Prompt for which label maps to edit.
-    #     postfixes = self.getLabelNodePostfixes()
-    #     postfix = qt.QInputDialog.getItem(slicer.util.mainWindow(),
-    #                                       "Select label maps", "Label map file name postfix:",
-    #                                       postfixes, len(postfixes), False)
-    #   elif msgBox.clickedButton() == createNewButton:
-    #     postfix = self.getNewLabelNodePostfix()
 
     # Set current directory for saving label volumes.
     diffNodeFilename = self.studies[0].diffNodes[0].GetStorageNode().GetFileName()
@@ -818,7 +829,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     dims = self.studies[0].diffNodes[0].GetImageData().GetDimensions()
     maxSliceNo = dims[2]+1
     curSliceNo = round(maxSliceNo/2)
-    self.setSliceSelector(minVal=1, maxVal=maxSliceNo, value=curSliceNo)
+    self.setSliceSelector(minVal=0, maxVal=maxSliceNo, value=curSliceNo)
     
     # Enable lesion contouring.
     EditUtil.setLabel(1)
@@ -933,9 +944,10 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       self.inputSliceSelector.value = (value)
 
 
-  def onInputSliceSelect(self):
-    slice = self.inputSliceSelector.value
-    self.setSlice(slice)
+  def onInputSliceSelect(self, iSlice):
+    self.bIgnoreSliceNodeEvents = True
+    self.setSlice(iSlice)
+    self.bIgnoreSliceNodeEvents = False
     
     
   def onResetWindowing(self):
@@ -1014,9 +1026,9 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     
     # Set slice selector.
     dims = self.studies[0].diffNodes[0].GetImageData().GetDimensions()
-    maxSliceNo = dims[2]+1
-    curSliceNo = round(maxSliceNo/2)
-    self.setSliceSelector(minVal=1, maxVal=maxSliceNo, value=curSliceNo)
+    maxSliceNo = dims[2]-1
+    curSliceNo = round(dims[2]/2.0)
+    self.setSliceSelector(minVal=0, maxVal=maxSliceNo, value=curSliceNo)
     
     # Enable lesion contouring.
     EditUtil.setLabel(1)
@@ -1279,10 +1291,30 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
         if statsLogic:
           labelNode = sliceLogic.GetLabelLayer().GetVolumeNode()
           self.populateStats(statsLogic, labelNode)
-          
+
+  def sliceNodeEvent(self, caller=None, event=None):
+    """ A slice node has changed.
+        Update the TrackLesions slice selector if the current sagittal slice has changed.
+    """
+    if self.bIgnoreSliceNodeEvents:
+      return
+    nodeName = caller.GetName()
+    sliceNodeNames = self.getSliceWidgets("*", "Sagittal")
+    if nodeName in sliceNodeNames:
+      sliceLogic = slicer.app.layoutManager().sliceWidget(nodeName).sliceLogic()
+      layerLogic = sliceLogic.GetBackgroundLayer()
+      volumeNode = layerLogic.GetVolumeNode()
+      if volumeNode:
+        xyz = [0.0, 0.0, 0.0]
+        xyToIjk = layerLogic.GetXYToIJKTransform()
+        ijkFloat = xyToIjk.TransformDoublePoint(xyz)
+        z = int(round(ijkFloat[2]))
+        #wasBlocking = self.inputSliceSelector.blockSignals(True)
+        self.inputSliceSelector.value = (z)
+        #self.inputSliceSelector.blockSignals(wasBlocking)
   
   def setSlice(self, iSlice):
-    # Set the slice displayed in the Current and Past volume nodes.
+    # Set the slice displayed in all sagittal slice nodes.
     orientations = {'Sagittal':0, 'Coronal':1, 'Axial':2}
     sliceNodeNames = self.getSliceWidgets("*", "Sagittal")
     for name in sliceNodeNames:

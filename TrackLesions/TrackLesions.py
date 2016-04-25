@@ -211,6 +211,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.currentDirectory = ""
     self.logic = TrackLesionsLogic()
     self.bIgnoreSliceNodeEvents = False
+    self.progressBar = None
         
     # Instantiate and connect widgets ...
     
@@ -351,7 +352,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.resetViewsButton = qt.QPushButton("Reset Data in Views")
     self.resetViewsButton.toolTip = "Load default images and labels in views. " \
                                     "Recenters and resynchronizes views. " \
-                                    "Use this if your volumes/studies are" \
+                                    "Use this if your volumes/studies are " \
                                     "loaded in the wrong windows."
     self.resetViewsButton.enabled = True
     self.uhohFrame.layout().addRow(self.resetViewsButton)
@@ -406,7 +407,8 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Save contours button
     self.saveContoursButton = qt.QPushButton("Save Contours")
-    self.saveContoursButton.toolTip = "Save contours as .mha label maps."
+    self.saveContoursButton.toolTip = "Save selected label volumes in .mha format. " \
+                                      "Label volumes are saved to the patient folder by default."
     self.saveContoursButton.enabled = True
     saveFormLayout.addWidget(self.saveContoursButton)
     saveFormLayout.addStretch(1)
@@ -752,19 +754,40 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     if not dir:
       return
 
+    # Load all subtraction and label volumes in folder.
     retNodes = []
     labelNodes = []
+    vl = slicer.modules.volumes.logic()
     for root, dirs, files in os.walk(dir):
-      for file in files:
+      self.progressBar = qt.QProgressDialog(slicer.util.mainWindow())
+      self.progressBar.labelText = 'Reading folder {0}...'.format(root)
+      self.progressBar.setMaximum(len(files))
+      self.progressBar.setValue(0)
+      self.progressBar.show()
+      for iFile, file in enumerate(files):
+        self.progressBar.setValue(iFile)
+        if self.progressBar.wasCanceled:
+          slicer.mrmlScene.Clear(0)
+          qt.QMessageBox.warning(slicer.util.mainWindow(), "Load patient",
+                                 "Load canceled. \nUnable to process.")
+          return
+
         if file.endswith(".mha"):
+          nodeName = file[:-4]
+          self.progressBar.labelText = 'Loading {0}...'.format(file)
           if file.lower().find("label") > 0:
             # Label volume.
-            retNode = slicer.util.loadLabelVolume(os.path.join(root, file), returnNode=True)[1]
-            labelNodes.append(retNode)
+            #retNode = slicer.util.loadLabelVolume(os.path.join(root, file), returnNode=True)[1]
+            vl.AddArchetypeVolume(os.path.join(root, file), nodeName, 1)
+            labelNodes.append(slicer.util.getNode(nodeName))
           else:
             # Image volume.
-            retNode = slicer.util.loadVolume(os.path.join(root, file), returnNode=True)[1]
-            retNodes.append(retNode)
+            #retNode = slicer.util.loadVolume(os.path.join(root, file), returnNode=True)[1]
+            list = []
+            vl.AddArchetypeVolume(os.path.join(root, file), nodeName, 0)
+            retNodes.append(slicer.util.getNode(nodeName))
+    self.progressBar.close()
+    self.progressBar = None
 
     # Sort input data into separate studies.
     self.studies = self.logic.sortVolumeNodes(retNodes)

@@ -220,6 +220,8 @@ class EditorWidget(VTKObservationMixin):
     if self.toolsBox:
       self.toolsBox.defaultEffect()
       self.toolsBox.cancelFloatingMode()
+    if self.labelSummaryWidget:
+      self.labelSummaryWidget.cleanup()
 
   def updateGUIFromMRML(self, caller, event):
     if self.toolsBox:
@@ -281,6 +283,7 @@ class EditorWidget(VTKObservationMixin):
     # Label color selector 
     colorNode = slicer.util.getNode('GenericColors')
     labelOptionsFrame = qt.QGroupBox("Labels", self.parent)
+    labelOptionsFrame.setStyleSheet("QGroupBox { font-weight: bold; } ")
     labelOptionsFrame.setLayout(qt.QVBoxLayout())
     self.toolsColor = MyEditorLib.EditColor(labelOptionsFrame, colorNode=colorNode)
     self.parent.layout().addWidget(labelOptionsFrame)
@@ -339,6 +342,7 @@ class EditorWidget(VTKObservationMixin):
   # assumes self.effectsToolsFrame and its layout has already been created
   def createEffectOptionsFrame(self):
     self.effectOptionsFrame = qt.QGroupBox("Tools", self.parent)
+    self.effectOptionsFrame.setStyleSheet("QGroupBox { font-weight: bold; } ")
     self.effectOptionsFrame.objectName = 'EffectOptionsFrame'
     self.effectOptionsFrame.setLayout(qt.QVBoxLayout())
 
@@ -349,13 +353,15 @@ class EditorWidget(VTKObservationMixin):
       self.effectOptionsFrame = self.createEffectOptionsFrame()
     #self.editBoxFrame = qt.QFrame(self.parent)
     self.editBoxFrame = qt.QGroupBox("Toolbox", self.parent)
+    self.editBoxFrame.setStyleSheet("QGroupBox { font-weight: bold; } ")
     self.editBoxFrame.objectName = 'EditBoxFrame'
     self.editBoxFrame.setLayout(qt.QVBoxLayout())
     self.toolsBox = MyEditorLib.EditBox(self.editBoxFrame, optionsFrame=self.effectOptionsFrame)
 
   # Creates the label summary widget.
   def createLabelSummaryWidget(self):
-    self.labelSummaryFrame = qt.QGroupBox("Current contours")
+    self.labelSummaryFrame = qt.QGroupBox("Current Contours")
+    self.labelSummaryFrame.setStyleSheet("QGroupBox { font-weight: bold; } ")
     self.labelSummaryFrame.objectName = "LabelSummaryFrame"
     self.labelSummaryFrame.setLayout(qt.QVBoxLayout())
     self.labelSummaryWidget = LabelSummaryWidget(self.labelSummaryFrame)

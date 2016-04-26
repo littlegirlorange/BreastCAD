@@ -299,7 +299,7 @@ class EditBox(VTKObservationMixin):
   def setActiveToolLabel(self,name):
     if EditBox.displayNames.has_key(name):
       name = EditBox.displayNames[name]
-    self.optionsFrame.setTitle(name + " options")
+    self.optionsFrame.setTitle(name + " Options")
     #self.toolsActiveToolName.setText(name)
 
   #

@@ -112,7 +112,8 @@ class LabelSummaryWidget(qt.QWidget):
       tag = self._labelNodeTags[name]
       if tag:
         node.RemoveObserver(tag)
-      
+      self._labelNodes.remove(node)
+
   #---------------------------------------------------------------------------
   def onLabelModified(self, caller=None, event=None):
     self.updateStructures()

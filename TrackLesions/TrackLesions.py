@@ -249,19 +249,35 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     
     # Patient selector
     self.openPatientButton = qt.QPushButton("Select Patient Folder")
+    self.openPatientButton.setStyleSheet("QPushButton { background-color: rgb(128, 174, 128) };")
     patientFormLayout.addRow(self.openPatientButton)
     
     # Patient info
     self.patientLayoutBox = qt.QGroupBox("Patient Info")
+    self.patientLayoutBox.setStyleSheet("QGroupBox { font-weight: bold; } ");
     self.patientLayoutBox.setLayout(qt.QFormLayout())    
     self.patientIdLabel = qt.QLabel()
     self.patientIdLabel.setText("<Select patient>")
     self.patientLayoutBox.layout().addRow("Patient ID:", self.patientIdLabel)    
     self.patientInfoView = qt.QTreeView()
     self.patientInfoView.sortingEnabled = False
+    self.patientInfoView.setMaximumHeight(70)
     self.patientLayoutBox.layout().addRow(self.patientInfoView)
-    self.setPatientInfo(reset=True)  
     patientFormLayout.addRow(self.patientLayoutBox)
+
+    # Radiology report
+    self.reportLabel = qt.QLabel()
+    self.reportLabel.setStyleSheet("QLabel { font-weight: bold; } ")
+    self.patientLayoutBox.layout().addRow(self.reportLabel)
+    self.reportText = qt.QLabel()
+    self.reportText.setWordWrap(True)
+    self.reportText.setFrameStyle(self.patientInfoView.frameStyle())
+    self.reportText.setSizePolicy(qt.QSizePolicy.Ignored, qt.QSizePolicy.Ignored)
+    palette = qt.QPalette()
+    palette.setColor(qt.QPalette.Background, qt.QColor(255, 255, 255))  # White background
+    self.reportText.setPalette(palette)
+    self.patientLayoutBox.layout().addRow(self.reportText)
+    self.setPatientInfo(reset=True)
     
     #
     # View area
@@ -274,6 +290,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     
     # View group box
     self.viewRadioBox = qt.QGroupBox("View")
+    self.viewRadioBox.setStyleSheet("QGroupBox { font-weight: bold; } ")
     self.viewRadioBox.setLayout(qt.QHBoxLayout())
     self.compareViewRadioButton = qt.QRadioButton()
     self.viewRadioBox.layout().addWidget(self.compareViewRadioButton)    
@@ -296,6 +313,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Navigate group box
     self.navigateFrame = qt.QGroupBox("Navigate")
+    self.navigateFrame.setStyleSheet("QGroupBox { font-weight: bold; } ")
     self.navigateFrame.setLayout(qt.QFormLayout())
     viewFormLayout.addRow(self.navigateFrame)
     instructions = qt.QLabel("Middle Scroll: scroll slices\n"
@@ -329,6 +347,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Window/Level group box
     self.windowingFrame = qt.QGroupBox("Window/Level")
+    self.windowingFrame.setStyleSheet("QGroupBox { font-weight: bold; } ")
     self.windowingFrame.setLayout(qt.QFormLayout())
     viewFormLayout.addRow(self.windowingFrame)
     instructions = qt.QLabel("Left Drag Left/Right: window\n"
@@ -345,6 +364,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Uh Oh group box
     self.uhohFrame = qt.QGroupBox("Uh Oh")
+    self.uhohFrame.setStyleSheet("QGroupBox { font-weight: bold; } ")
     self.uhohFrame.setLayout(qt.QFormLayout())
     viewFormLayout.addRow(self.uhohFrame)
 
@@ -368,6 +388,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Current label
     self.currentLabelFrame = qt.QGroupBox("Label Volume(s)")
+    self.currentLabelFrame.setStyleSheet("QGroupBox { font-weight: bold; } ")
     self.currentLabelFrame.setLayout(qt.QHBoxLayout())
     self.currentLabelLabel = qt.QLabel("Current label volume:")
     self.currentLabelFrame.layout().addWidget(self.currentLabelLabel)
@@ -392,6 +413,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Current label
     self.saveLabelFrame = qt.QGroupBox("Label Volume(s)")
+    self.saveLabelFrame.setStyleSheet("QGroupBox { font-weight: bold; } ")
     self.saveLabelFrame.setLayout(qt.QVBoxLayout())
     # model and view for stats table
     self.labelTableView = qt.QTableView()
@@ -407,6 +429,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
     # Save contours button
     self.saveContoursButton = qt.QPushButton("Save Contours")
+    self.saveContoursButton.setStyleSheet("QPushButton { background-color: rgb(128, 174, 128) };")
     self.saveContoursButton.toolTip = "Save selected label volumes in .mha format. " \
                                       "Label volumes are saved to the patient folder by default."
     self.saveContoursButton.enabled = True
@@ -558,10 +581,10 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   def resetFieldOfViewForTheFirstTime(self):
     # Have to display each layout using processEvents() in order for each
     # slice node to be created and know its true size. This flickers and is slow,
-    # but it's the only way to make all slice nodes have the same FOV.
+    # but it's the only way to force all slice nodes have the same FOV.
     layoutIds = [currentFourUpViewId, past1FourUpViewId, past2FourUpViewId, compareLayoutId]
-    viewNames = ["CompareView", "CurrentView", "Past1View", "Past2View"]
     widgetNames = ["Current_Sub1", "Past1_Sub1", "Past2_Sub2", "Current_Sub1"]
+    self.setLinkedControl()
     layoutManager = slicer.app.layoutManager()
     for i, id in enumerate(layoutIds):
       layoutManager.setLayout(id)
@@ -615,6 +638,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     
     
   def setPatientInfo(self, reset=False):
+    # Update patient info table.
     if len(self.studies) == 0:
       reset = True
     if reset:
@@ -640,8 +664,30 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     self.patientInfoModel.setHeaderData(2, 1, "Date")      
     self.patientInfoView.setModel(self.patientInfoModel)
     for i in range(self.patientInfoModel.columnCount()):
-      self.patientInfoView.resizeColumnToContents(i) 
-    
+      self.patientInfoView.resizeColumnToContents(i)
+    self.patientInfoView.connect("clicked(QModelIndex)", self.onPatientInfoItemClicked)
+
+    # Display appropriate report.
+    if not reset and len(self.studies) > 0:
+      self.patientInfoView.setCurrentIndex(self.patientInfoModel.index(0, 0))
+      self.setReport(self.studies[0], self.timePoints[0])
+    else:
+      self.setReport()
+
+  def setReport(self, study=None, timePoint=None):
+    if not study:
+      self.reportLabel.setText("Radiology Report")
+      self.reportText.setText("<Select study>")
+    else:
+      self.reportLabel.setText("Radiology Report - " + timePoint)
+      if study.report:
+        self.reportText.setText(study.report)
+      else:
+        self.reportText.setText("Report unavailable")
+
+  def onPatientInfoItemClicked(self, modelIndex):
+    if modelIndex.row() != -1 and modelIndex.row() < len(self.studies):
+      self.setReport(self.studies[modelIndex.row()], self.timePoints[modelIndex.row()])
 
   def onViewSelected(self):
     if self.compareViewRadioButton.checked:
@@ -748,8 +794,8 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
        
     # Create custom Qt dialog here instead of using slicer.util.openadddatadialog() to avoid
     # loaded scenes and other non-.mha data.
-    dir = qt.QFileDialog.getExistingDirectory(slicer.util.mainWindow(), 
-                                              "Select Patient Folder", "", 
+    dir = qt.QFileDialog.getExistingDirectory(slicer.util.mainWindow(),
+                                              "Select Patient Folder", params.defaultPath,
                                               qt.QFileDialog.DontUseNativeDialog)
     if not dir:
       return
@@ -760,6 +806,8 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     vl = slicer.modules.volumes.logic()
     for root, dirs, files in os.walk(dir):
       self.progressBar = qt.QProgressDialog(slicer.util.mainWindow())
+      self.progressBar.setWindowModality(1)  # 0-Qt::NonModal, 1-Qt::WindowModal, 2-Qt::ApplicationModal
+      self.progressBar.setWindowTitle("Load patient")
       self.progressBar.labelText = 'Reading folder {0}...'.format(root)
       self.progressBar.setMaximum(len(files))
       self.progressBar.setValue(0)
@@ -777,13 +825,10 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
           self.progressBar.labelText = 'Loading {0}...'.format(file)
           if file.lower().find("label") > 0:
             # Label volume.
-            #retNode = slicer.util.loadLabelVolume(os.path.join(root, file), returnNode=True)[1]
             vl.AddArchetypeVolume(os.path.join(root, file), nodeName, 1)
             labelNodes.append(slicer.util.getNode(nodeName))
           else:
             # Image volume.
-            #retNode = slicer.util.loadVolume(os.path.join(root, file), returnNode=True)[1]
-            list = []
             vl.AddArchetypeVolume(os.path.join(root, file), nodeName, 0)
             retNodes.append(slicer.util.getNode(nodeName))
     self.progressBar.close()
@@ -1140,11 +1185,11 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     '''
     if modelIndex.row() == -1:
       return
+    saveItem = self.labelTableModel.itemFromIndex(modelIndex)
+    if not saveItem.isCheckable():
+      return
     if modelIndex.column() == self.labelTableColHeaders.index('Save'):
       # Save state changed for a label volume.
-      saveItem = self.labelTableModel.itemFromIndex(modelIndex)
-      if not saveItem.isCheckable():
-        return
       saveCheckState = saveItem.checkState()
       overwriteItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Overwrite'))
       saveAsItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Save as'))
@@ -1162,13 +1207,13 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       saveAsItem = self.labelTableModel.item(modelIndex.row(), self.labelTableColHeaders.index('Save as'))
       overwriteCheckState = overwriteItem.checkState()
       if overwriteCheckState == 0:  # Unchecked = do not overwrite
-        # Enable Save as and set to a unique label name.
+        # Enable Save As and set to a unique label name.
         saveAsItem.setEnabled(True)
         postfix = self.getUniqueLabelPostfix()
         newLabelName = "label" + (postfix if not postfix else ("_"+postfix))
         saveAsItem.setText(newLabelName)
       elif overwriteCheckState == 2:  # Checked = overwrite
-        # Disable Save as and set to original name.
+        # Disable Save As and set to original name.
         saveAsItem.setEnabled(False)
         saveAsItem.setText(labelNameItem.text())
 
@@ -1547,7 +1592,6 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
         study = self.getStudyVolumeNodesLongStudy(accessionNo)
         if study:
           studies.append(study)
-          
     else:
       # Get all pre-contrast nodes (should be one per study).
       preContrastNodeDict = slicer.util.getNodes(pattern="*"+params.preContrastSeriesNameTag+"*")
@@ -1562,7 +1606,19 @@ class TrackLesionsLogic(ScriptedLoadableModuleLogic):
         study = self.getStudyVolumeNodes(preContrastNode)
         if study:
           studies.append(study)
-        
+
+    # Add radiologist report info to study if available.
+    if len(studies) > 0:
+      folder = params.reportPath + os.sep + studies[0].patientId
+      if os.path.exists(folder):
+        for study in studies:
+          matching = [s for s in os.listdir(folder) if study.accessionNo+"_report.txt" in s]
+          # Assume first match is the right match.
+          if matching:
+            f = open(folder + os.sep + matching[0], 'r')
+            report = f.read()
+            study.report = report
+
     # Some previous studies don't have registered breast masks.  Use the
     # current study's breast mask if missing.
     for iStudy in range(1, len(studies)):
@@ -2135,5 +2191,6 @@ class CADStudy:
     self.diffNodes = None
     self.labelNode = None
     self.maskedDiffNode = None
+    self.report = None
       
 

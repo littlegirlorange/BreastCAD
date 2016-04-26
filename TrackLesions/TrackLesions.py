@@ -171,7 +171,10 @@ past2FourUpViewId = 504
 #
 
 LONG_STUDY_FLAG = True
-VOLUME_RENDER = False
+if params.volumeRender:
+  VOLUME_RENDER = params.volumeRender
+else:
+  VOLUME_RENDER = False
 
 class TrackLesions(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
@@ -550,6 +553,15 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
 
 
   def cleanup(self):
+    if len(self.studies) > 0:
+      modifiedLabelNodes = self.getModifiedLabelNodes()
+      if len(modifiedLabelNodes) > 0:
+        qResult = qt.QMessageBox.question(slicer.util.mainWindow(), "Exit TrackLesions",
+                                          "There are unsaved changes to label volumes\nSave label volumes?",
+                                          qt.QMessageBox.Yes | qt.QMessageBox.No,
+                                          qt.QMessageBox.Yes)
+      if qResult == qt.QMessageBox.Yes:
+        return
     for sliceNode, tag in self.sliceNodeTags:
       sliceNode.RemoveObserver(tag)
     self.removeLeftButtonObservers()
@@ -731,7 +743,6 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
     if name != "*":
       name = name + "*"
     nSliceNodes = slicer.mrmlScene.GetNumberOfNodesByClass('vtkMRMLSliceNode')
-    layoutManager = slicer.app.layoutManager()
     sliceWidgets = []
     for iSliceNode in xrange(nSliceNodes):
       sliceNode = slicer.mrmlScene.GetNthNodeByClass(iSliceNode, 'vtkMRMLSliceNode')
@@ -763,7 +774,7 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
   def getModifiedLabelNodes(self):
     labelNodeDict = slicer.util.getNodes(pattern="*label*")
     for name, node in labelNodeDict.iteritems():
-      if not node.GetModifiedSinceRead():
+      if not node.GetModifiedSinceRead() and not self.logic.hasLabels(node):
         del labelNodeDict[name]
     return labelNodeDict.values()
 
@@ -882,13 +893,14 @@ class TrackLesionsWidget(ScriptedLoadableModuleWidget):
       else:       
         # Set windowing of subtraction images (don't show negative values).
         for volumeNode in study.diffNodes:
-          imageData = vtk.vtkImageData()
-          imageData = volumeNode.GetImageData()      
-          scalarRange = imageData.GetScalarRange()
-          displayNode = volumeNode.GetDisplayNode()
-          displayNode.SetAutoWindowLevel(0)
-          #displayNode.SetThreshold(0, scalarRange[1])
-          displayNode.SetWindowLevelMinMax(0, scalarRange[1])
+          self.setWindowing(volumeNode, 0)
+          # imageData = vtk.vtkImageData()
+          # imageData = volumeNode.GetImageData()
+          # scalarRange = imageData.GetScalarRange()
+          # displayNode = volumeNode.GetDisplayNode()
+          # displayNode.SetAutoWindowLevel(0)
+          # #displayNode.SetThreshold(0, scalarRange[1])
+          # displayNode.SetWindowLevelMinMax(0, scalarRange[1])
         
       # Set up label nodes for lesion contouring.
       volumeNode = study.diffNodes[0]

@@ -6,6 +6,9 @@ defaultPath = "M:\\maggieData\\Lara\\ToContour\\Invasive"
 # [Path to radiology reports]
 reportPath = "M:\\maggieData\\Lara\\Reports"
 
+# [Display 3D MIPs]
+volumeRender = True
+
 # [Unique tags used to differentiate image types based on file name]
 motionCorrectionStepTag = "mc"
 breastSegmentationStepTag = "mask"
